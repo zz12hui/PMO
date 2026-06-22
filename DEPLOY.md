@@ -540,3 +540,7 @@ sudo tail -50 /var/log/nginx/error.log
 # 证书续期
 sudo certbot renew --dry-run
 ```
+## 作者微信，
+创作交流请加备注github
+#### 支持定制项目可按需求
+<img width="566" height="540" alt="image" src="https://github.com/user-attachments/assets/dd67ac0b-a751-46a8-b762-d71715faa049" />
