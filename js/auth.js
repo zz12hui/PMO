@@ -117,13 +117,6 @@ const Auth = (function() {
     _saveLockState(username.trim(), { failCount: 0, firstFailAt: 0, lockedUntil: 0 });
   }
 
-  // Check if this is the first run (no accounts exist)
-  async function isFirstRun() {
-    await initAuthDB();
-    const all = await DB.getAll(AUTH_DB, AUTH_STORE);
-    return all.length === 0;
-  }
-
   // Create account (admin only)
   async function createAccount(username, displayName, password, role, overrides) {
     if (!username || username.trim().length < 2) {
@@ -165,33 +158,6 @@ const Auth = (function() {
       if (overrides.projectQuota != null) account.projectQuota = overrides.projectQuota;
     }
 
-    await DB.put(AUTH_DB, AUTH_STORE, account);
-    return { id: account.id, username: account.username, displayName: account.displayName, role: account.role };
-  }
-
-  // First-run initialization: create admin account without session check
-  async function initAdminAccount(username, password) {
-    if (!username || username.trim().length < 2) {
-      throw new Error('用户名至少2个字符');
-    }
-    if (!password || password.length < 6) {
-      throw new Error('密码至少6位');
-    }
-    await initAuthDB();
-    const all = await DB.getAll(AUTH_DB, AUTH_STORE);
-    if (all.length > 0) {
-      throw new Error('系统已初始化，不能重复创建管理员账号');
-    }
-    const account = {
-      id: genAccountId(),
-      username: username.trim(),
-      displayName: '管理员',
-      passwordHash: await hashPassword(username, password),
-      hashVersion: 1,
-      role: 'admin',
-      createdAt: new Date().toISOString(),
-      lastLogin: null
-    };
     await DB.put(AUTH_DB, AUTH_STORE, account);
     return { id: account.id, username: account.username, displayName: account.displayName, role: account.role };
   }
@@ -442,8 +408,6 @@ const Auth = (function() {
     deleteAccount,
     resetPassword,
     getAccountUsage,
-    isFirstRun,
-    initAdminAccount,
     updateAccountOverrides,
     updateAccount,
     _getAccountById
@@ -462,7 +426,5 @@ async function listAccounts() { return Auth.listAccounts(); }
 async function deleteAccount(id) { return Auth.deleteAccount(id); }
 async function resetPassword(id, newPassword) { return Auth.resetPassword(id, newPassword); }
 async function getAccountUsage(accountId) { return Auth.getAccountUsage(accountId); }
-async function isFirstRun() { return Auth.isFirstRun(); }
-async function initAdminAccount(username, password) { return Auth.initAdminAccount(username, password); }
 async function updateAccount(id, fields) { return Auth.updateAccount(id, fields); }
 async function updateAccountOverrides(id, overrides) { return Auth.updateAccountOverrides(id, overrides); }
