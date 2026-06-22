@@ -669,3 +669,9 @@
 ### 注意事项
 - ⚠️ IndexedDB 数据存储在浏览器本地，清除浏览器数据会导致**不可恢复**
 - ⚠️ 建议每周五导出一次全量报表
+
+- ## 作者微信，
+创作交流请加备注github
+#### 支持定制项目可按需求
+<img width="566" height="540" alt="image" src="https://github.com/user-attachments/assets/dd67ac0b-a751-46a8-b762-d71715faa049" />
+
