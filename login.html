@@ -35,9 +35,6 @@ body {
 .logo-area h1 { font-size: 18px; font-weight: 700; }
 .logo-area p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
-.form-panel { display: none; }
-.form-panel.active { display: block; }
-
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; letter-spacing: 0.3px; }
 .form-group input {
@@ -46,7 +43,6 @@ body {
   background: #fafbfc;
 }
 .form-group input:focus { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgba(79,110,247,0.08); }
-.form-group input.error { border-color: var(--danger); }
 
 .btn { width: 100%; padding: 11px; border-radius: 7px; font-size: 14px; font-weight: 600;
   cursor: pointer; border: none; transition: var(--transition); font-family: inherit; }
@@ -55,15 +51,7 @@ body {
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .error-msg { color: var(--danger); font-size: 12px; margin-top: 10px; text-align: center; min-height: 18px; }
-.success-msg { color: var(--success); font-size: 12px; margin-top: 10px; text-align: center; min-height: 18px; }
-
 .footer-text { text-align: center; margin-top: 20px; font-size: 12px; color: var(--text-secondary); }
-
-.setup-note {
-  background: var(--primary-light); border: 1px solid #c8d3fc;
-  border-radius: var(--radius); padding: 12px; margin-bottom: 20px;
-  font-size: 13px; color: var(--primary); text-align: center;
-}
 </style>
 <script src="js/db-core.js"></script>
 <script src="js/auth.js"></script>
@@ -73,107 +61,34 @@ body {
   <div class="logo-area">
     <div class="logo">📋</div>
     <h1>PMO 项目管理看板</h1>
-    <p id="panelSubtitle">请登录以继续</p>
+    <p>请登录以继续</p>
   </div>
 
-  <!-- First-run Setup Panel -->
-  <div class="form-panel" id="panelSetup">
-    <div class="setup-note">🔐 首次启动 · 创建管理员账号</div>
-    <div class="form-group">
-      <label>管理员用户名</label>
-      <input type="text" id="setupUsername" placeholder="请输入管理员用户名" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <label>密码</label>
-      <input type="password" id="setupPassword" placeholder="至少6位密码" autocomplete="new-password">
-    </div>
-    <div class="form-group">
-      <label>确认密码</label>
-      <input type="password" id="setupConfirmPassword" placeholder="再次输入密码" autocomplete="new-password">
-    </div>
-    <button class="btn btn-primary" onclick="handleSetup()" id="setupBtn">初始化系统</button>
-    <div class="error-msg" id="setupError"></div>
+  <div class="form-group">
+    <label>用户名</label>
+    <input type="text" id="loginUsername" placeholder="请输入管理员分配的账号" autocomplete="username">
   </div>
-
-  <!-- Login Form -->
-  <div class="form-panel active" id="panelLogin">
-    <div class="form-group">
-      <label>用户名</label>
-      <input type="text" id="loginUsername" placeholder="请输入管理员分配的账号" autocomplete="username">
-    </div>
-    <div class="form-group">
-      <label>密码</label>
-      <input type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password">
-    </div>
-    <button class="btn btn-primary" onclick="handleLogin()" id="loginBtn">登 录</button>
-    <div class="error-msg" id="loginError"></div>
-    <div class="error-msg" id="lockoutMsg" style="display:none;background:var(--danger-bg);padding:8px;border-radius:6px;margin-top:8px;"></div>
+  <div class="form-group">
+    <label>密码</label>
+    <input type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password">
   </div>
+  <button class="btn btn-primary" onclick="handleLogin()" id="loginBtn">登 录</button>
+  <div class="error-msg" id="loginError"></div>
+  <div class="error-msg" id="lockoutMsg" style="display:none;background:var(--danger-bg);padding:8px;border-radius:6px;margin-top:8px;"></div>
 
-  <div class="footer-text" id="footerText">没有账号？请联系管理员</div>
+  <div class="footer-text">没有账号？请联系管理员</div>
 </div>
 
 <script>
 (function() {
   'use strict';
 
-  /* ==================== Guard ==================== */
   // If already logged in, redirect based on role
   const existingSession = getSession();
   if (existingSession) {
     window.location.href = (existingSession.role === 'admin') ? 'admin/' : 'index.html';
   }
 
-  /* ==================== First-run detection ==================== */
-  async function checkFirstRun() {
-    try {
-      const first = await isFirstRun();
-      if (first) {
-        document.getElementById('panelLogin').classList.remove('active');
-        document.getElementById('panelSetup').classList.add('active');
-        document.getElementById('panelSubtitle').textContent = '首次启动 — 创建管理员账号';
-        document.getElementById('footerText').textContent = 'PMO 账号管理系统 v2.0';
-      }
-    } catch(e) {
-      console.warn('isFirstRun check failed:', e);
-    }
-  }
-  checkFirstRun();
-
-  /* ==================== Setup (First-run) ==================== */
-  window.handleSetup = async function() {
-    const username = document.getElementById('setupUsername').value.trim();
-    const password = document.getElementById('setupPassword').value;
-    const confirmPassword = document.getElementById('setupConfirmPassword').value;
-    const errEl = document.getElementById('setupError');
-    const btn = document.getElementById('setupBtn');
-
-    errEl.textContent = '';
-    if (!username) { errEl.textContent = '请输入管理员用户名'; return; }
-    if (!password) { errEl.textContent = '请输入密码'; return; }
-    if (password.length < 6) { errEl.textContent = '密码至少6位'; return; }
-    if (password !== confirmPassword) { errEl.textContent = '两次密码输入不一致'; return; }
-
-    btn.disabled = true;
-    btn.textContent = '初始化中...';
-
-    try {
-      await initAdminAccount(username, password);
-      // Switch to login
-      document.getElementById('panelSetup').classList.remove('active');
-      document.getElementById('panelLogin').classList.add('active');
-      document.getElementById('panelSubtitle').textContent = '管理员账号已创建，请登录';
-      document.getElementById('loginUsername').value = username;
-      document.getElementById('loginPassword').focus();
-    } catch(e) {
-      errEl.textContent = e.message || '初始化失败';
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '初始化系统';
-    }
-  };
-
-  /* ==================== Login ==================== */
   window.handleLogin = async function() {
     const username = document.getElementById('loginUsername').value.trim();
     const password = document.getElementById('loginPassword').value;
@@ -189,7 +104,7 @@ body {
     btn.disabled = true;
     btn.textContent = '登录中...';
 
-    // ── Lockout check ──
+    // Lockout check
     const lockState = getLockState(username);
     if (lockState.locked) {
       const mins = Math.ceil(lockState.waitSeconds / 60);
@@ -211,17 +126,10 @@ body {
     }
   };
 
-  /* ==================== Enter key support ==================== */
+  // Enter key
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-      if (document.getElementById('panelSetup').classList.contains('active')) {
-        handleSetup();
-      } else if (document.getElementById('panelLogin').classList.contains('active')) {
-        handleLogin();
-      }
-    }
+    if (e.key === 'Enter') handleLogin();
   });
-
 })();
 </script>
 </body>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PMO 初始化</title>
+<style>
+:root {
+  --bg: #f5f6fa; --card: #ffffff; --border: #e9ecf2; --text: #2c3e50;
+  --text-secondary: #7f8c9b; --primary: #4f6ef7; --primary-light: #eef1fd;
+  --danger: #ef4444; --radius: 10px; --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+}
+.card {
+  background: var(--card); border-radius: 14px; box-shadow: var(--shadow-lg);
+  padding: 40px 36px; width: 400px; max-width: 94vw; border: 1px solid var(--border);
+}
+.logo-area { text-align: center; margin-bottom: 28px; }
+.logo { width: 52px; height: 52px; border-radius: 12px; background: linear-gradient(135deg, #4f6ef7, #6366f1); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 24px; margin-bottom: 8px; }
+.logo-area h1 { font-size: 18px; font-weight: 700; }
+.logo-area p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; }
+.form-group input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; font-size: 14px; font-family: inherit; outline: none; background: #fafbfc; }
+.form-group input:focus { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgba(79,110,247,0.08); }
+.btn { width: 100%; padding: 11px; border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #3d5ce5; }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.error-msg { color: var(--danger); font-size: 12px; margin-top: 10px; text-align: center; min-height: 18px; }
+.setup-note { background: var(--primary-light); border: 1px solid #c8d3fc; border-radius: var(--radius); padding: 12px; margin-bottom: 20px; font-size: 13px; color: var(--primary); text-align: center; }
+.footer-text { text-align: center; margin-top: 20px; font-size: 12px; color: var(--text-secondary); }
+</style>
+<script src="js/db-core.js"></script>
+<script src="js/auth.js"></script>
+</head>
+<body>
+<div class="card">
+  <div class="logo-area">
+    <div class="logo">🔐</div>
+    <h1>PMO 系统初始化</h1>
+    <p id="statusText">创建管理员账号</p>
+  </div>
+
+  <div id="panelSetup">
+    <div class="setup-note">🔐 首次启动 · 创建管理员账号</div>
+    <div class="form-group"><label>管理员用户名</label><input type="text" id="setupUsername" placeholder="请输入管理员用户名" autocomplete="off"></div>
+    <div class="form-group"><label>密码</label><input type="password" id="setupPassword" placeholder="至少6位密码" autocomplete="new-password"></div>
+    <div class="form-group"><label>确认密码</label><input type="password" id="setupConfirmPassword" placeholder="再次输入密码" autocomplete="new-password"></div>
+    <button class="btn btn-primary" onclick="handleSetup()" id="setupBtn">初始化系统</button>
+    <div class="error-msg" id="setupError"></div>
+  </div>
+
+  <div id="panelDone" style="display:none;text-align:center;">
+    <div class="setup-note">✅ 管理员账号已创建</div>
+    <p style="margin:12px 0;font-size:14px;">请前往登录页使用刚才设置的用户名和密码登录</p>
+    <button class="btn btn-primary" onclick="location.href='login.html'">前往登录</button>
+  </div>
+
+  <div id="panelAlreadyDone" style="display:none;text-align:center;">
+    <div class="setup-note">⚠️ 系统已初始化</div>
+    <p style="margin:12px 0;font-size:14px;">系统中已有账号，请直接登录</p>
+    <button class="btn btn-primary" onclick="location.href='login.html'">前往登录</button>
+  </div>
+
+  <div class="footer-text">PMO 账号管理系统 v1.0</div>
+</div>
+
+<script>
+(async function() {
+  // Check if already initialized
+  const first = await isFirstRun();
+  if (!first) {
+    document.getElementById('panelSetup').style.display = 'none';
+    document.getElementById('panelAlreadyDone').style.display = 'block';
+  }
+})();
+
+window.handleSetup = async function() {
+  const username = document.getElementById('setupUsername').value.trim();
+  const password = document.getElementById('setupPassword').value;
+  const confirmPassword = document.getElementById('setupConfirmPassword').value;
+  const errEl = document.getElementById('setupError');
+  const btn = document.getElementById('setupBtn');
+
+  errEl.textContent = '';
+  if (!username) { errEl.textContent = '请输入管理员用户名'; return; }
+  if (!password) { errEl.textContent = '请输入密码'; return; }
+  if (password.length < 6) { errEl.textContent = '密码至少6位'; return; }
+  if (password !== confirmPassword) { errEl.textContent = '两次密码输入不一致'; return; }
+
+  btn.disabled = true; btn.textContent = '初始化中...';
+  try {
+    await initAdminAccount(username, password);
+    document.getElementById('panelSetup').style.display = 'none';
+    document.getElementById('panelDone').style.display = 'block';
+  } catch(e) {
+    errEl.textContent = e.message || '初始化失败';
+    btn.disabled = false; btn.textContent = '初始化系统';
+  }
+};
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') handleSetup();
+});
+</script>
+</body>
+</html>
