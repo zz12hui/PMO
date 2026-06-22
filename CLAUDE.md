@@ -115,3 +115,9 @@ updateAccountOverrides(id, ov)    → void             // admin only
 
 ## 中文内容安全
 所有文档和 UI 使用中性行业词汇，避免敏感关键词。详见 PLAN.md。
+
+## 作者微信，
+创作交流请加备注github
+#### 支持定制项目可按需求
+<img width="566" height="540" alt="image" src="https://github.com/user-attachments/assets/dd67ac0b-a751-46a8-b762-d71715faa049" />
+
