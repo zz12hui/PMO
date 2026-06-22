@@ -272,3 +272,8 @@ https://www.4si.cc/PMO/
 | `Esc` | 关闭弹窗 |
 | `Enter` | 登录页提交 |
 | `双击` | 编辑任务单元格 |
+
+## 作者微信，
+创作交流请加备注github
+#### 支持定制项目可按需求
+<img width="566" height="540" alt="image" src="https://github.com/user-attachments/assets/dd67ac0b-a751-46a8-b762-d71715faa049" />
