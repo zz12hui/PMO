@@ -11,6 +11,18 @@
   <img src="https://img.shields.io/badge/backend-none-lightgrey" alt="no backend">
   <img src="https://img.shields.io/badge/deploy-nginx%20%7C%20apache%20%7C%20python-orange" alt="deploy">
 </p>
+---
+
+
+## 文档导航
+
+| 文档 | 适合谁 |
+|------|--------|
+| [README.md](./README.md) | 所有人（项目介绍） |
+| [USER_MANUAL.md](./USER_MANUAL.md) | 所有用户（日常操作） |
+| [SOP.md](./SOP.md) | 管理员 + 项目经理（规范操作） |
+| [DEPLOY.md](./DEPLOY.md) | 运维 / 部署人员 |
+| [CLAUDE.md](./CLAUDE.md) | AI 编程助手 |
 
 ---
 
@@ -223,17 +235,6 @@ PMO/
 MIT License — 随便用，随便改。
 
 ---
-
-## 文档导航
-
-| 文档 | 适合谁 |
-|------|--------|
-| [README.md](./README.md) | 所有人（项目介绍） |
-| [USER_MANUAL.md](./USER_MANUAL.md) | 所有用户（日常操作） |
-| [SOP.md](./SOP.md) | 管理员 + 项目经理（规范操作） |
-| [DEPLOY.md](./DEPLOY.md) | 运维 / 部署人员 |
-| [CLAUDE.md](./CLAUDE.md) | AI 编程助手 |
-
 
 ## 作者微信，
 创作交流请加备注github
