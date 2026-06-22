@@ -1,0 +1,22 @@
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# 临时文件
+*.tmp
+*.log
+
+# 备份
+*.bak
+*.backup
+
+# 内部技术方案（可选：不发布内部文档）
+# PLAN.md
+# PLAN-v2.md

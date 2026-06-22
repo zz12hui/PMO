@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理后台 - PMO</title>
+<style>
+:root {
+  --bg: #f5f6fa; --card: #ffffff; --border: #e9ecf2; --text: #2c3e50;
+  --text-secondary: #7f8c9b; --primary: #4f6ef7; --primary-light: #eef1fd;
+  --success: #22c55e; --success-bg: #e6f9ef; --warning: #f59e0b;
+  --warning-bg: #fff8eb; --danger: #ef4444; --danger-bg: #fef2f2;
+  --radius: 10px; --shadow: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+  --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.topbar {
+  background: var(--card); border-bottom: 1px solid var(--border);
+  padding: 0 24px; display: flex; align-items: center; justify-content: space-between;
+  height: 56px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow);
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-left h1 { font-size: 16px; font-weight: 700; }
+.topbar-right { display: flex; gap: 8px; align-items: center; }
+.btn {
+  padding: 7px 15px; border-radius: 7px; font-size: 13px; font-weight: 500;
+  cursor: pointer; border: 1px solid var(--border); background: var(--card);
+  color: var(--text); transition: var(--transition); display: inline-flex;
+  align-items: center; gap: 5px; white-space: nowrap; font-family: inherit;
+}
+.btn:hover { background: #f8f9fb; }
+.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover { background: #3d5ce5; }
+.btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-danger:hover { background: #dc2626; }
+.btn-sm { padding: 5px 11px; font-size: 12px; border-radius: 5px; }
+
+/* Tabs */
+.tab-bar {
+  display: flex; background: var(--card); border-bottom: 1px solid var(--border);
+  padding: 0 24px; gap: 0; position: sticky; top: 56px; z-index: 99;
+}
+.tab {
+  padding: 12px 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+  color: var(--text-secondary); border-bottom: 2px solid transparent;
+  margin-bottom: -1px; transition: var(--transition);
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.container { max-width: 960px; margin: 24px auto; padding: 0 20px; }
+
+/* Summary */
+.summary {
+  background: var(--card); border-radius: var(--radius); padding: 14px 20px;
+  box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 18px;
+  display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--text-secondary);
+}
+.summary strong { color: var(--text); }
+
+/* Account card */
+.account-card {
+  background: var(--card); border-radius: var(--radius); padding: 18px 20px;
+  box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 12px;
+  transition: var(--transition);
+}
+.account-card:hover { box-shadow: var(--shadow-lg); }
+.account-card .acct-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+}
+.acct-header .acct-info { display: flex; align-items: center; gap: 10px; }
+.acct-avatar {
+  width: 36px; height: 36px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center; font-size: 16px;
+  background: var(--primary-light); color: var(--primary); font-weight: 700;
+}
+.acct-name { font-weight: 600; font-size: 14px; }
+.acct-username { font-size: 12px; color: var(--text-secondary); }
+.acct-role {
+  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+}
+.acct-role.admin { background: #fef3c7; color: #92400e; }
+.acct-role.user { background: #eef1fd; color: #3d5ce5; }
+
+.acct-body { font-size: 13px; line-height: 1.8; }
+.acct-body .metrics { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
+.acct-body .metric { display: flex; align-items: center; gap: 4px; }
+.acct-body .metric .m-label { font-size: 11px; color: var(--text-secondary); }
+.acct-body .metric .m-value { font-weight: 600; }
+
+.acct-footer { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+.acct-footer .last-login { flex: 1; font-size: 11px; color: var(--text-secondary); }
+
+.empty-state { text-align: center; padding: 40px; color: var(--text-secondary); font-size: 14px; }
+
+/* Config table */
+.config-table { width: 100%; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); }
+.config-row { display: flex; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+.config-row:last-child { border-bottom: none; }
+.config-label { flex: 1; font-size: 13px; font-weight: 500; }
+.config-desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.config-input { width: 140px; }
+.config-input input[type="number"] {
+  width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; font-family: inherit; outline: none; background: #fafbfc; text-align: right;
+}
+.config-input input[type="number"]:focus { border-color: var(--primary); }
+.config-check { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.config-check input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+.config-actions { display: flex; gap: 8px; padding: 16px 18px; }
+
+/* Quota table */
+.quota-table { width: 100%; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); }
+.quota-row { display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); gap: 12px; }
+.quota-row:last-child { border-bottom: none; }
+.quota-user { min-width: 120px; }
+.quota-user .name { font-size: 13px; font-weight: 600; }
+.quota-user .uname { font-size: 11px; color: var(--text-secondary); }
+.quota-bars { flex: 1; display: flex; gap: 16px; }
+.quota-bar-item { flex: 1; }
+.quota-bar-label { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; }
+.quota-bar-bg { height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden; }
+.quota-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+.quota-bar-fill.low { background: var(--success); }
+.quota-bar-fill.mid { background: var(--warning); }
+.quota-bar-fill.high { background: var(--danger); }
+
+/* Modal */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(15,23,42,.4);
+  z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(2px);
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--card); border-radius: 14px; padding: 28px; width: 440px;
+  max-width: 94vw; box-shadow: 0 20px 60px rgba(0,0,0,.15);
+  animation: modalIn .2s ease-out;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal h3 { font-size: 17px; margin-bottom: 18px; font-weight: 700; }
+.modal .form-group { margin-bottom: 14px; }
+.modal .form-group label { display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; letter-spacing: .3px; }
+.modal .form-group input, .modal .form-group select {
+  width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px;
+  font-size: 13px; font-family: inherit; outline: none; transition: var(--transition);
+  background: #fafbfc;
+}
+.modal .form-group input:focus, .modal .form-group select:focus { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgba(79,110,247,.08); }
+.modal .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.modal .error-msg { color: var(--danger); font-size: 12px; margin-top: 8px; text-align: center; min-height: 18px; }
+
+.toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: #1e293b; color: #fff; padding: 10px 22px; border-radius: 8px; font-size: 13px; z-index: 300; opacity: 0; transition: opacity .3s; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+.toast.show { opacity: 1; }
+</style>
+<script src="../js/db-core.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/config.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <span style="font-size:20px;">⚙️</span>
+    <h1>PMO 管理后台</h1>
+  </div>
+  <div class="topbar-right">
+    <a href="../index.html" class="btn">← 返回看板</a>
+    <button class="btn btn-sm" onclick="logout();window.location.href='../login.html'">退出</button>
+  </div>
+</div>
+
+<div class="tab-bar" id="tabBar">
+  <div class="tab active" data-tab="accounts" onclick="switchTab('accounts')">👥 账号管理</div>
+  <div class="tab" data-tab="config" onclick="switchTab('config')">⚙️ 系统配置</div>
+  <div class="tab" data-tab="quotas" onclick="switchTab('quotas')">📊 配额管理</div>
+</div>
+
+<div class="container">
+
+  <!-- ===== Tab 1: 账号管理 ===== -->
+  <div class="tab-panel active" id="panelAccounts">
+    <div class="summary" id="summaryBar">加载中...</div>
+    <div id="accountList"><div class="empty-state">加载中...</div></div>
+    <div style="text-align:center;margin-top:20px;">
+      <button class="btn btn-primary" onclick="openNewAccountModal()">＋ 新建账号</button>
+    </div>
+  </div>
+
+  <!-- ===== Tab 2: 系统配置 ===== -->
+  <div class="tab-panel" id="panelConfig">
+    <div class="config-table">
+      <div class="config-row">
+        <div class="config-label">
+          知识库配额 (MB)<div class="config-desc">每个账号默认知识库存储上限</div>
+        </div>
+        <div class="config-input"><input type="number" id="cfgKbQuota" min="1" step="1"></div>
+      </div>
+      <div class="config-row">
+        <div class="config-label">
+          项目数量上限<div class="config-desc">每个账号最多可创建的项目数</div>
+        </div>
+        <div class="config-input"><input type="number" id="cfgProjectQuota" min="1" step="1"></div>
+      </div>
+      <div class="config-row">
+        <div class="config-label">
+          会话有效期 (小时)<div class="config-desc">超过该时间需重新登录</div>
+        </div>
+        <div class="config-input"><input type="number" id="cfgSessionHours" min="1" step="1"></div>
+      </div>
+      <div class="config-row">
+        <div class="config-label">
+          最大上传文件 (MB)<div class="config-desc">知识库单个文件大小上限</div>
+        </div>
+        <div class="config-input"><input type="number" id="cfgMaxFileSize" min="1" step="1"></div>
+      </div>
+      <div class="config-row">
+        <div class="config-label">
+          密码最小长度<div class="config-desc">新建/重置密码的最小字符数</div>
+        </div>
+        <div class="config-input"><input type="number" id="cfgMinPwdLen" min="1" step="1"></div>
+      </div>
+      <div class="config-row">
+        <div class="config-label">
+          最大任务层级<div class="config-desc">任务树最大嵌套深度</div>
+        </div>
+        <div class="config-input"><input type="number" id="cfgMaxDepth" min="1" step="1"></div>
+      </div>
+      <div class="config-row">
+        <div class="config-label">
+          首次登录显示演示数据<div class="config-desc">新账号默认加载示例项目</div>
+        </div>
+        <div class="config-input config-check">
+          <input type="checkbox" id="cfgShowDemo">
+        </div>
+      </div>
+      <div class="config-actions">
+        <button class="btn btn-primary" onclick="saveConfig()">💾 保存配置</button>
+        <button class="btn" onclick="resetConfig()">🔄 恢复默认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Tab 3: 配额管理 ===== -->
+  <div class="tab-panel" id="panelQuotas">
+    <div class="quota-table" id="quotaList">
+      <div class="empty-state">加载中...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- New Account Modal -->
+<div class="modal-overlay" id="newAccountModal">
+  <div class="modal">
+    <h3>新建账号</h3>
+    <div class="form-group">
+      <label>用户名 <span style="color:var(--danger)">*</span></label>
+      <input type="text" id="newUsername" placeholder="2-20位英文字母/数字/下划线">
+    </div>
+    <div class="form-group">
+      <label>显示名 <span style="color:var(--danger)">*</span></label>
+      <input type="text" id="newDisplayName" placeholder="如：张三">
+    </div>
+    <div class="form-group">
+      <label>密码 <span style="color:var(--danger)">*</span></label>
+      <input type="password" id="newPassword" placeholder="至少6位">
+    </div>
+    <div class="form-group">
+      <label>角色</label>
+      <select id="newRole">
+        <option value="user">👤 用户</option>
+        <option value="admin">👑 管理员</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>KB配额 (MB) <span style="font-weight:400;color:var(--text-secondary)">留空=系统默认</span></label>
+      <input type="number" id="newKbQuota" placeholder="如：200（留空使用默认值）" min="1" step="1">
+    </div>
+    <div class="form-group">
+      <label>项目配额 <span style="font-weight:400;color:var(--text-secondary)">留空=系统默认</span></label>
+      <input type="number" id="newProjectQuota" placeholder="如：20（留空使用默认值）" min="1" step="1">
+    </div>
+    <div class="error-msg" id="newAccountError"></div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeNewAccountModal()">取消</button>
+      <button class="btn btn-primary" onclick="doCreateAccount()">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal-overlay" id="resetPwdModal">
+  <div class="modal">
+    <h3>重置密码</h3>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;">
+      为账号 <strong id="resetPwdUsername"></strong> 设置新密码
+    </p>
+    <div class="form-group">
+      <label>新密码</label>
+      <input type="password" id="resetNewPassword" placeholder="至少6位">
+    </div>
+    <div class="error-msg" id="resetPwdError"></div>
+    <input type="hidden" id="resetPwdAccountId" value="">
+    <div class="form-actions">
+      <button class="btn" onclick="closeResetPwdModal()">取消</button>
+      <button class="btn btn-primary" onclick="doResetPassword()">确认重置</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quota Edit Modal -->
+<div class="modal-overlay" id="quotaModal">
+  <div class="modal">
+    <h3>编辑配额 — <span id="quotaModalName"></span></h3>
+    <div class="form-group">
+      <label>KB配额 (MB) <span style="font-weight:400;color:var(--text-secondary)">留空=跟随系统默认</span></label>
+      <input type="number" id="quotaKb" placeholder="留空使用系统默认值" min="1" step="1">
+    </div>
+    <div class="form-group">
+      <label>项目配额 <span style="font-weight:400;color:var(--text-secondary)">留空=跟随系统默认</span></label>
+      <input type="number" id="quotaProj" placeholder="留空使用系统默认值" min="1" step="1">
+    </div>
+    <div class="error-msg" id="quotaError"></div>
+    <input type="hidden" id="quotaAccountId" value="">
+    <div class="form-actions">
+      <button class="btn" onclick="closeQuotaModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveQuotaOverride()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Account Modal -->
+<div class="modal-overlay" id="editAccountModal">
+  <div class="modal">
+    <h3>编辑账号 — <span id="editAccountUsername"></span></h3>
+    <div class="form-group">
+      <label>显示名 <span style="color:var(--danger)">*</span></label>
+      <input type="text" id="editDisplayName" placeholder="如：张三">
+    </div>
+    <div class="form-group">
+      <label>角色</label>
+      <select id="editRole">
+        <option value="user">👤 用户</option>
+        <option value="admin">👑 管理员</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>KB配额 (MB) <span style="font-weight:400;color:var(--text-secondary)">留空=跟随系统默认</span></label>
+      <input type="number" id="editKbQuota" placeholder="留空使用系统默认值" min="1" step="1">
+    </div>
+    <div class="form-group">
+      <label>项目配额 <span style="font-weight:400;color:var(--text-secondary)">留空=跟随系统默认</span></label>
+      <input type="number" id="editProjQuota" placeholder="留空使用系统默认值" min="1" step="1">
+    </div>
+    <div class="error-msg" id="editAccountError"></div>
+    <input type="hidden" id="editAccountId" value="">
+    <div class="form-actions">
+      <button class="btn" onclick="closeEditAccountModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveEditAccount()">💾 保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ==================== Guard ==================== */
+  const session = getSession();
+  if (!session) { window.location.href = '../login.html'; throw new Error('Redirecting to login'); }
+  if (session.role !== 'admin') { window.location.href = '../index.html'; throw new Error('Redirecting to main board'); }
+
+  /* ==================== Toast ==================== */
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  /* ==================== Utility ==================== */
+  function formatSize(bytes) {
+    if (!bytes || bytes < 0) return '0B';
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + 'KB';
+    return (bytes / 1048576).toFixed(1) + 'MB';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '从未登录';
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = now - d;
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+    if (diff < 604800000) return Math.floor(diff / 86400000) + '天前';
+    return d.toLocaleDateString('zh-CN');
+  }
+
+  /* ==================== Tab Switch ==================== */
+  window.switchTab = function(tabName) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector('.tab[data-tab="' + tabName + '"]').classList.add('active');
+    document.getElementById('panel' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.add('active');
+
+    if (tabName === 'accounts') renderAccounts();
+    else if (tabName === 'config') loadConfig();
+    else if (tabName === 'quotas') renderQuotas();
+  };
+
+  /* ================================================================
+     TAB 1: 账号管理
+     ================================================================ */
+  let _accountCache = {}; // acc.id → account data for edit modals
+
+  async function renderAccounts() {
+    try {
+      _accountCache = {};
+      const accounts = await listAccounts();
+      let totalKB = 0;
+
+      let html = '';
+      for (const acc of accounts) {
+        _accountCache[acc.id] = acc;
+        const usage = await getAccountUsage(acc.id);
+
+        // Calculate project progress %
+        let taskCount = 0, doneCount = 0, overdueCount = 0;
+        try {
+          const allTasks = await DB.getAllByIndex('pm_data', 'tasks', 'accountId', acc.id);
+          taskCount = allTasks.length;
+          doneCount = allTasks.filter(t => t.status === '已完成').length;
+          const now = new Date();
+          overdueCount = allTasks.filter(t => {
+            if (t.status === '已完成') return false;
+            return (t.planEnd && new Date(t.planEnd) < now);
+          }).length;
+        } catch(e) { console.warn('task stats error:', e); }
+
+        const progressPct = taskCount > 0 ? Math.round(doneCount / taskCount * 100) : 0;
+
+        totalKB += usage.kbBytes;
+
+        html += `
+        <div class="account-card">
+          <div class="acct-header">
+            <div class="acct-info">
+              <div class="acct-avatar">${(acc.displayName||acc.username).charAt(0)}</div>
+              <div>
+                <div class="acct-name">${acc.displayName||acc.username}</div>
+                <div class="acct-username">@${acc.username}</div>
+              </div>
+            </div>
+            <span class="acct-role ${acc.role}">${acc.role === 'admin' ? '👑 管理员' : '👤 用户'}</span>
+          </div>
+          <div class="acct-body">
+            <div class="metrics">
+              <div class="metric"><span class="m-label">项目进度：</span><span class="m-value">${progressPct}%</span> <span style="font-size:11px;color:var(--text-secondary)">(${doneCount}/${taskCount})</span></div>
+              <div class="metric"><span class="m-label">📊 项目：</span><span class="m-value">${usage.projectCount}</span></div>
+              <div class="metric"><span class="m-label">💾 知识库：</span><span class="m-value">${formatSize(usage.kbBytes)}</span></div>
+              <div class="metric"><span class="m-label">⚠️ 延期：</span><span class="m-value" style="color:${overdueCount>0?'var(--danger)':'inherit'}">${overdueCount}</span></div>
+            </div>
+          </div>
+          <div class="acct-footer">
+            <span class="last-login">🕐 最后登录：${formatDate(acc.lastLogin)} · 📅 创建于：${formatDate(acc.createdAt)}</span>
+            <button class="btn btn-sm" onclick="openResetPwdModal('${acc.id}')">重置密码</button>
+            <button class="btn btn-sm" onclick="openEditAccountModal('${acc.id}')" style="background:var(--primary-light);color:var(--primary);border-color:var(--primary-light);">✎ 编辑</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteAccountConfirm('${acc.id}')">删除账号</button>
+          </div>
+        </div>`;
+      }
+
+      document.getElementById('accountList').innerHTML = html || '<div class="empty-state">暂无账号</div>';
+      document.getElementById('summaryBar').innerHTML = `📊 总计：<strong>${accounts.length}</strong> 个账号 · 知识库合计占用 <strong>${formatSize(totalKB)}</strong>`;
+    } catch(e) {
+      document.getElementById('accountList').innerHTML = '<div class="empty-state" style="color:var(--danger);">加载失败：' + e.message + '</div>';
+    }
+  }
+
+  /* New Account Modal */
+  window.openNewAccountModal = function() {
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newDisplayName').value = '';
+    document.getElementById('newPassword').value = '';
+    document.getElementById('newRole').value = 'user';
+    document.getElementById('newKbQuota').value = '';
+    document.getElementById('newProjectQuota').value = '';
+    document.getElementById('newAccountError').textContent = '';
+    document.getElementById('newAccountModal').classList.add('show');
+  };
+
+  window.closeNewAccountModal = function() {
+    document.getElementById('newAccountModal').classList.remove('show');
+  };
+
+  window.doCreateAccount = async function() {
+    const username = document.getElementById('newUsername').value.trim();
+    const displayName = document.getElementById('newDisplayName').value.trim();
+    const password = document.getElementById('newPassword').value;
+    const role = document.getElementById('newRole').value;
+    const kbQuotaVal = document.getElementById('newKbQuota').value.trim();
+    const projQuotaVal = document.getElementById('newProjectQuota').value.trim();
+    const errEl = document.getElementById('newAccountError');
+
+    errEl.textContent = '';
+    if (!username) { errEl.textContent = '请输入用户名'; return; }
+    if (!displayName) { errEl.textContent = '请输入显示名'; return; }
+    if (!password || password.length < 6) { errEl.textContent = '密码至少6位'; return; }
+
+    const overrides = {};
+    if (kbQuotaVal) {
+      const v = parseInt(kbQuotaVal);
+      if (isNaN(v) || v < 1) { errEl.textContent = 'KB配额需为正整数'; return; }
+      overrides.kbQuotaMB = v;
+    }
+    if (projQuotaVal) {
+      const v = parseInt(projQuotaVal);
+      if (isNaN(v) || v < 1) { errEl.textContent = '项目配额需为正整数'; return; }
+      overrides.projectQuota = v;
+    }
+
+    try {
+      await createAccount(username, displayName, password, role, Object.keys(overrides).length > 0 ? overrides : undefined);
+      closeNewAccountModal();
+      showToast('账号「' + username + '」创建成功');
+      renderAccounts();
+    } catch(e) {
+      errEl.textContent = e.message || '创建失败';
+    }
+  };
+
+  /* ==================== Edit Account ==================== */
+  window.openEditAccountModal = function(id) {
+    const acc = _accountCache[id] || {};
+    document.getElementById('editAccountId').value = id;
+    document.getElementById('editAccountUsername').textContent = '@' + (acc.username || '');
+    document.getElementById('editDisplayName').value = acc.displayName || '';
+    document.getElementById('editRole').value = acc.role || 'user';
+    document.getElementById('editKbQuota').value = (acc.kbQuotaMB != null) ? acc.kbQuotaMB : '';
+    document.getElementById('editProjQuota').value = (acc.projectQuota != null) ? acc.projectQuota : '';
+    document.getElementById('editAccountError').textContent = '';
+    document.getElementById('editAccountModal').classList.add('show');
+  };
+
+  window.closeEditAccountModal = function() {
+    document.getElementById('editAccountModal').classList.remove('show');
+  };
+
+  window.saveEditAccount = async function() {
+    const id = document.getElementById('editAccountId').value;
+    const displayName = document.getElementById('editDisplayName').value.trim();
+    const role = document.getElementById('editRole').value;
+    const kbVal = document.getElementById('editKbQuota').value.trim();
+    const projVal = document.getElementById('editProjQuota').value.trim();
+    const errEl = document.getElementById('editAccountError');
+    errEl.textContent = '';
+
+    if (!displayName) { errEl.textContent = '请输入显示名'; return; }
+
+    const fields = { displayName, role };
+    if (kbVal !== '') {
+      const v = parseInt(kbVal);
+      if (isNaN(v) || v < 1) { errEl.textContent = 'KB配额需为正整数'; return; }
+      fields.kbQuotaMB = v;
+    } else {
+      fields.kbQuotaMB = null;
+    }
+    if (projVal !== '') {
+      const v = parseInt(projVal);
+      if (isNaN(v) || v < 1) { errEl.textContent = '项目配额需为正整数'; return; }
+      fields.projectQuota = v;
+    } else {
+      fields.projectQuota = null;
+    }
+
+    try {
+      await updateAccount(id, fields);
+      closeEditAccountModal();
+      showToast('账号「' + displayName + '」已更新');
+      renderAccounts();
+      if (document.querySelector('.tab[data-tab="quotas"]').classList.contains('active')) renderQuotas();
+    } catch(e) {
+      errEl.textContent = e.message || '更新失败';
+    }
+  };
+
+  /* Reset Password */
+  window.openResetPwdModal = function(id) {
+    const acc = _accountCache[id] || {};
+    document.getElementById('resetPwdAccountId').value = id;
+    document.getElementById('resetPwdUsername').textContent = acc.username || '';
+    document.getElementById('resetNewPassword').value = '';
+    document.getElementById('resetPwdError').textContent = '';
+    document.getElementById('resetPwdModal').classList.add('show');
+  };
+  window.closeResetPwdModal = function() { document.getElementById('resetPwdModal').classList.remove('show'); };
+  window.doResetPassword = async function() {
+    const id = document.getElementById('resetPwdAccountId').value;
+    const pwd = document.getElementById('resetNewPassword').value;
+    const errEl = document.getElementById('resetPwdError');
+    errEl.textContent = '';
+    if (!pwd || pwd.length < 6) { errEl.textContent = '密码至少6位'; return; }
+    try {
+      await resetPassword(id, pwd);
+      closeResetPwdModal();
+      showToast('密码已重置');
+    } catch(e) { errEl.textContent = e.message || '重置失败'; }
+  };
+
+  /* Delete Account */
+  window.deleteAccountConfirm = async function(id) {
+    const acc = _accountCache[id] || {};
+    const name = acc.displayName || acc.username || id;
+    if (!confirm('确定要删除账号「' + name + '」吗？\n该操作不可撤销。')) return;
+    try {
+      await deleteAccount(id);
+      showToast('账号已删除');
+      renderAccounts();
+    } catch(e) { showToast('删除失败：' + e.message); }
+  };
+
+  /* ================================================================
+     TAB 2: 系统配置
+     ================================================================ */
+  async function loadConfig() {
+    const cfg = await Config.get();
+    document.getElementById('cfgKbQuota').value = cfg.defaultKbQuotaMB;
+    document.getElementById('cfgProjectQuota').value = cfg.defaultProjectQuota;
+    document.getElementById('cfgSessionHours').value = cfg.sessionExpireHours;
+    document.getElementById('cfgMaxFileSize').value = cfg.maxFileSizeMB;
+    document.getElementById('cfgMinPwdLen').value = cfg.minPasswordLength;
+    document.getElementById('cfgMaxDepth').value = cfg.maxTaskDepth;
+    document.getElementById('cfgShowDemo').checked = cfg.showDemoOnFirstLogin;
+  }
+
+  window.saveConfig = async function() {
+    try {
+      const partial = {
+        defaultKbQuotaMB: parseInt(document.getElementById('cfgKbQuota').value) || Config.DEFAULTS.defaultKbQuotaMB,
+        defaultProjectQuota: parseInt(document.getElementById('cfgProjectQuota').value) || Config.DEFAULTS.defaultProjectQuota,
+        sessionExpireHours: parseInt(document.getElementById('cfgSessionHours').value) || Config.DEFAULTS.sessionExpireHours,
+        maxFileSizeMB: parseInt(document.getElementById('cfgMaxFileSize').value) || Config.DEFAULTS.maxFileSizeMB,
+        minPasswordLength: parseInt(document.getElementById('cfgMinPwdLen').value) || Config.DEFAULTS.minPasswordLength,
+        maxTaskDepth: parseInt(document.getElementById('cfgMaxDepth').value) || Config.DEFAULTS.maxTaskDepth,
+        showDemoOnFirstLogin: document.getElementById('cfgShowDemo').checked
+      };
+      await Config.update(partial);
+      showToast('配置已保存，实时生效');
+    } catch(e) { showToast('保存失败：' + e.message); }
+  };
+
+  window.resetConfig = async function() {
+    if (!confirm('确定要恢复所有配置为默认值吗？')) return;
+    await Config.reset();
+    await loadConfig();
+    showToast('已恢复默认配置');
+  };
+
+  /* ================================================================
+     TAB 3: 配额管理
+     ================================================================ */
+  async function renderQuotas() {
+    try {
+      const accounts = await listAccounts();
+      const cfg = await Config.get();
+
+      let html = '';
+      for (const acc of accounts) {
+        _accountCache[acc.id] = acc;
+        const usage = await getAccountUsage(acc.id);
+        const eff = await Config.getEffectiveQuota(acc.id);
+
+        const kbUsedMB = usage.kbBytes / 1048576;
+        const kbPct = eff.kbQuotaMB > 0 ? Math.min(100, (kbUsedMB / eff.kbQuotaMB) * 100) : 0;
+        const projPct = eff.projectQuota > 0 ? Math.min(100, (usage.projectCount / eff.projectQuota) * 100) : 0;
+
+        const barClass = (pct) => pct > 80 ? 'high' : (pct > 50 ? 'mid' : 'low');
+        const hasOverride = (acc.kbQuotaMB != null) || (acc.projectQuota != null);
+
+        html += `
+        <div class="quota-row">
+          <div class="quota-user">
+            <div class="name">${acc.displayName||acc.username} ${hasOverride ? '<span style="font-size:10px;background:var(--primary-light);color:var(--primary);padding:1px 6px;border-radius:4px;">自定义</span>' : ''}</div>
+            <div class="uname">@${acc.username}</div>
+          </div>
+          <div class="quota-bars">
+            <div class="quota-bar-item">
+              <div class="quota-bar-label"><span>💾 知识库</span><span>${kbUsedMB.toFixed(1)}/${eff.kbQuotaMB} MB</span></div>
+              <div class="quota-bar-bg"><div class="quota-bar-fill ${barClass(kbPct)}" style="width:${kbPct}%"></div></div>
+            </div>
+            <div class="quota-bar-item">
+              <div class="quota-bar-label"><span>📊 项目</span><span>${usage.projectCount}/${eff.projectQuota}</span></div>
+              <div class="quota-bar-bg"><div class="quota-bar-fill ${barClass(projPct)}" style="width:${projPct}%"></div></div>
+            </div>
+          </div>
+          <div><button class="btn btn-sm" onclick="openQuotaModal('${acc.id}')">编辑</button></div>
+        </div>`;
+      }
+
+      document.getElementById('quotaList').innerHTML = html || '<div class="empty-state">暂无账号</div>';
+    } catch(e) {
+      document.getElementById('quotaList').innerHTML = '<div class="empty-state" style="color:var(--danger);">加载失败：' + e.message + '</div>';
+    }
+  }
+
+  window.openQuotaModal = async function(id) {
+    const acc = _accountCache[id] || {};
+    document.getElementById('quotaAccountId').value = id;
+    document.getElementById('quotaModalName').textContent = acc.displayName || acc.username || '';
+    document.getElementById('quotaKb').value = (acc.kbQuotaMB != null) ? acc.kbQuotaMB : '';
+    document.getElementById('quotaProj').value = (acc.projectQuota != null) ? acc.projectQuota : '';
+    document.getElementById('quotaError').textContent = '';
+    document.getElementById('quotaModal').classList.add('show');
+  };
+
+  window.closeQuotaModal = function() { document.getElementById('quotaModal').classList.remove('show'); };
+
+  window.saveQuotaOverride = async function() {
+    const id = document.getElementById('quotaAccountId').value;
+    const kbVal = document.getElementById('quotaKb').value.trim();
+    const projVal = document.getElementById('quotaProj').value.trim();
+    const errEl = document.getElementById('quotaError');
+    errEl.textContent = '';
+
+    const overrides = {};
+    if (kbVal !== '') {
+      const v = parseInt(kbVal);
+      if (isNaN(v) || v < 1) { errEl.textContent = 'KB配额需为正整数'; return; }
+      overrides.kbQuotaMB = v;
+    } else {
+      overrides.kbQuotaMB = null; // Remove override
+    }
+    if (projVal !== '') {
+      const v = parseInt(projVal);
+      if (isNaN(v) || v < 1) { errEl.textContent = '项目配额需为正整数'; return; }
+      overrides.projectQuota = v;
+    } else {
+      overrides.projectQuota = null; // Remove override
+    }
+
+    try {
+      await updateAccountOverrides(id, overrides);
+      closeQuotaModal();
+      showToast('配额已更新');
+      renderQuotas();
+    } catch(e) { errEl.textContent = e.message || '更新失败'; }
+  };
+
+  /* ==================== Init ==================== */
+  renderAccounts();
+})();
+</script>
+</body>
+</html>

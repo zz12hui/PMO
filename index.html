@@ -1,0 +1,2340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>项目管理看板</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="js/db-core.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/config.js"></script>
+<style>
+:root {
+  --bg: #f5f6fa; --card: #ffffff; --border: #e9ecf2; --text: #2c3e50;
+  --text-secondary: #7f8c9b; --primary: #4f6ef7; --primary-light: #eef1fd;
+  --success: #22c55e; --success-bg: #e6f9ef; --warning: #f59e0b;
+  --warning-bg: #fff8eb; --danger: #ef4444; --danger-bg: #fef2f2;
+  --radius: 10px; --shadow: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+  --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); line-height:1.5; -webkit-font-smoothing:antialiased; }
+
+.navbar { background:var(--card); border-bottom:1px solid var(--border); padding:0 24px; display:flex; align-items:center; justify-content:space-between; height:56px; position:sticky; top:0; z-index:100; box-shadow:var(--shadow); }
+.navbar-left { display:flex; align-items:center; gap:14px; }
+.logo { width:34px; height:34px; background:linear-gradient(135deg,#4f6ef7,#6366f1); border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:17px; }
+.navbar h1 { font-size:16px; font-weight:700; }
+.navbar-right { display:flex; gap:8px; align-items:center; }
+.btn { padding:7px 15px; border-radius:7px; font-size:13px; font-weight:500; cursor:pointer; border:1px solid var(--border); background:var(--card); color:var(--text); transition:var(--transition); display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+.btn:hover { background:#f8f9fb; }
+.btn-primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+.btn-primary:hover { background:#3d5ce5; }
+.btn-sm { padding:5px 11px; font-size:12px; border-radius:5px; }
+.btn-warn { background:var(--warning-bg); color:#b45309; border-color:#fde68a; }
+.btn-warn:hover { background:#fef3c7; }
+
+.main-layout { display:flex; height:calc(100vh - 56px); }
+
+.sidebar { width:280px; background:var(--card); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; overflow:hidden; }
+.sidebar-sec { padding:14px 16px; border-bottom:1px solid var(--border); }
+.sidebar-sec:last-child { border-bottom:none; flex:1; overflow-y:auto; display:flex; flex-direction:column; }
+.sidebar-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:#94a3b8; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
+.sidebar-label .count { font-size:10px; font-weight:400; background:var(--bg); padding:1px 7px; border-radius:8px; }
+
+.project-select { position:relative; }
+.project-current { padding:10px 14px; border:1px solid var(--border); border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; transition:var(--transition); }
+.project-current:hover { border-color:var(--primary); }
+.project-current .arrow { margin-left:auto; font-size:10px; color:var(--text-secondary); }
+.project-dropdown { display:none; position:absolute; top:100%; left:0; right:0; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow-lg); z-index:20; margin-top:4px; overflow:hidden; }
+.project-dropdown.show { display:block; }
+.project-dropdown .item { padding:10px 14px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px; transition:var(--transition); }
+.project-dropdown .item:hover { background:var(--primary-light); }
+.project-dropdown .item.active { background:var(--primary-light); color:var(--primary); font-weight:600; }
+.project-dropdown .item .check { margin-left:auto; color:var(--primary); }
+.project-dropdown .divider { border-top:1px solid var(--border); margin:4px 0; }
+.project-dropdown .item.add { color:var(--primary); font-weight:500; }
+
+.phase-list { display:flex; flex-direction:column; gap:2px; }
+.phase-item { padding:9px 12px; border-radius:7px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px; transition:var(--transition); border:1px solid transparent; }
+.phase-item:hover { background:var(--bg); }
+.phase-item.active { background:var(--primary-light); border-color:#c8d3fc; color:var(--primary); font-weight:600; }
+.phase-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.phase-count { margin-left:auto; font-size:11px; color:var(--text-secondary); }
+.phase-item.active .phase-count { color:var(--primary); }
+.phase-actions { display:none; gap:2px; margin-left:4px; }
+.phase-item:hover .phase-actions { display:flex; }
+.phase-actions button { border:none; background:transparent; cursor:pointer; font-size:12px; padding:2px 4px; border-radius:4px; color:var(--text-secondary); }
+.phase-actions button:hover { background:#e0e0e0; }
+.phase-actions button.del:hover { color:var(--danger); background:var(--danger-bg); }
+
+/* Knowledge Base */
+.kb-cat-header { display:flex; align-items:center; padding:6px 8px; margin-top:4px; font-size:11px; font-weight:700; color:var(--text-secondary); cursor:pointer; user-select:none; border-radius:5px; gap:4px; }
+.kb-cat-header:hover { background:var(--bg); }
+.kb-cat-toggle { font-size:8px; transition:transform .15s; width:12px; text-align:center; }
+.kb-cat-header.collapsed .kb-cat-toggle { transform:rotate(-90deg); }
+.kb-cat-name { flex:1; }
+.kb-cat-count { font-size:10px; color:#94a3b8; }
+.kb-cat-del { font-size:10px; cursor:pointer; color:#ccc; padding:0 3px; border:none; background:none; display:none; }
+.kb-cat-header:hover .kb-cat-del { display:inline; }
+.kb-cat-del:hover { color:var(--danger); }
+.kb-items { padding-left:16px; }
+.kb-cat-header.collapsed + .kb-items { display:none; }
+.kb-item { display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:5px; font-size:12px; cursor:pointer; transition:var(--transition); }
+.kb-item:hover { background:var(--bg); }
+.kb-item-icon { width:18px; text-align:center; font-size:13px; flex-shrink:0; }
+.kb-item-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-primary); }
+.kb-item-size { font-size:10px; color:#94a3b8; flex-shrink:0; }
+.kb-item-del { font-size:10px; cursor:pointer; color:#ccc; padding:0 2px; border:none; background:none; display:none; flex-shrink:0; }
+.kb-item:hover .kb-item-del { display:inline; }
+.kb-item-del:hover { color:var(--danger); }
+
+.content { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+.stats-panel { padding:10px 20px; display:flex; flex-direction:column; gap:10px; }
+.stats-section { }
+.stats-section-title { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:#94a3b8; margin-bottom:6px; padding-left:2px; }
+.stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; }
+.stat-card { background:var(--card); border-radius:var(--radius); padding:12px 14px; box-shadow:var(--shadow); display:flex; align-items:center; gap:10px; border:1px solid var(--border); transition:var(--transition); }
+.stat-card:hover { box-shadow:var(--shadow-lg); transform:translateY(-1px); }
+.stat-icon { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+.stat-num { font-size:18px; font-weight:700; line-height:1.1; }
+.stat-label { font-size:11px; color:var(--text-secondary); }
+.stat-bar-wrap { flex:1; min-width:60px; }
+.stat-bar-bg { height:6px; background:#f1f5f9; border-radius:3px; overflow:hidden; }
+.stat-bar-fill { height:100%; border-radius:3px; transition:width .4s ease; }
+.phase-stat-card { background:var(--card); border-radius:var(--radius); padding:10px 12px; box-shadow:var(--shadow); border:1px solid var(--border); transition:var(--transition); display:flex; flex-direction:column; gap:6px; }
+.phase-stat-card:hover { box-shadow:var(--shadow-lg); transform:translateY(-1px); }
+.phase-stat-head { display:flex; align-items:center; gap:6px; }
+.phase-stat-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.phase-stat-name { font-size:12px; font-weight:600; flex:1; }
+.phase-stat-count { font-size:11px; color:var(--text-secondary); }
+.phase-stat-bars { display:flex; gap:2px; height:5px; border-radius:2px; overflow:hidden; }
+.phase-stat-bars .seg { height:100%; border-radius:2px; }
+
+.toolbar { display:flex; align-items:center; gap:8px; padding:0 20px 10px; flex-wrap:wrap; }
+.search-wrap { position:relative; flex:1; max-width:280px; min-width:160px; }
+.search-wrap input { width:100%; padding:7px 12px 7px 34px; border:1px solid var(--border); border-radius:7px; font-size:13px; outline:none; transition:var(--transition); background:var(--card); }
+.search-wrap input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,110,247,0.08); }
+.search-wrap .icon { position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; }
+.spacer { flex:1; }
+
+.table-wrap { flex:1; overflow:auto; padding:0 20px 16px; }
+.table-scroll { overflow:auto; max-height:calc(100vh - 360px); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid var(--border); }
+table { width:100%; border-collapse:collapse; background:var(--card); min-width:1100px; }
+thead { position:sticky; top:0; z-index:5; }
+th { background:#fafbfd; padding:9px 8px; text-align:left; font-size:11px; font-weight:700; color:var(--text-secondary); border-bottom:2px solid var(--border); white-space:nowrap; }
+td { padding:7px 8px; border-bottom:1px solid #f1f3f7; font-size:13px; vertical-align:middle; }
+tr:hover { background:#fafbfd; }
+tr.row-selected { background:#eef1fd !important; }
+tr.phase-sep td { background:#f8f9fd; font-weight:700; color:var(--primary); padding:8px 10px; border-bottom:2px solid #e0e4f7; font-size:12px; cursor:pointer; }
+tr.phase-sep .toggle-icon { display:inline-block; transition:transform .2s; margin-right:5px; font-size:9px; }
+tr.phase-sep.collapsed .toggle-icon { transform:rotate(-90deg); }
+
+th.chk-col { width:38px; padding:9px 4px; text-align:center; }
+th.chk-col input, td.chk-col input { width:15px; height:15px; accent-color:var(--primary); cursor:pointer; margin:0; }
+td.chk-col { padding:7px 4px; text-align:center; }
+
+.task-toggle { display:inline-block; width:16px; height:16px; cursor:pointer; user-select:none; font-size:9px; line-height:16px; text-align:center; color:var(--text-secondary); transition:transform .15s; margin-right:2px; flex-shrink:0; }
+.task-toggle.collapsed { transform:rotate(-90deg); }
+.task-toggle.leaf { visibility:hidden; }
+.task-name-cell { display:flex; align-items:center; }
+
+td input.i-date, td input.i-num { border:1px solid transparent; border-radius:4px; padding:4px 6px; font-size:12px; font-family:inherit; background:transparent; outline:none; transition:var(--transition); width:100%; }
+td input.i-num { width:52px; text-align:center; }
+td input.i-date:focus, td input.i-num:focus { border-color:var(--primary); background:#fff; box-shadow:0 0 0 2px rgba(79,110,247,0.07); }
+td select.i-sel { border:1px solid transparent; border-radius:5px; padding:3px 5px; font-size:12px; background:transparent; cursor:pointer; outline:none; font-family:inherit; width:100%; }
+td select.i-sel:focus { border-color:var(--primary); background:#fff; }
+
+.pred-link { display:inline-block; padding:3px 7px; border-radius:4px; font-size:11px; background:#f3f0ff; color:#7c3aed; cursor:pointer; transition:var(--transition); max-width:140px; word-break:break-all; line-height:1.4; vertical-align:top; }
+.pred-link:hover { background:#ede9fe; }
+.pred-link.empty { background:transparent; color:#ccc; cursor:default; border:1px dashed #eee; }
+.io-badge { display:inline-block; padding:3px 7px; border-radius:4px; font-size:11px; background:#e6f9ef; color:#15803d; max-width:180px; word-break:break-all; line-height:1.4; vertical-align:top; }
+.io-badge.empty { background:transparent; color:#ccc; border:1px dashed #eee; word-break:normal; }
+
+.status-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.status-badge.completed { background:var(--success-bg); color:#15803d; }
+.status-badge.in-progress { background:#eef1fd; color:#3d5ce5; }
+.status-badge.delayed { background:var(--warning-bg); color:#b45309; }
+.status-badge.not-started { background:#f1f5f9; color:#94a3b8; }
+
+.col-actions .btns { display:flex; gap:1px; }
+.act-btn { width:26px; height:26px; border-radius:5px; border:none; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center; transition:var(--transition); background:transparent; color:var(--text-secondary); }
+.act-btn:hover { background:var(--bg); }
+.act-btn.edit:hover { background:#eef1fd; color:var(--primary); }
+.act-btn.add:hover { background:#e6f9ef; color:var(--success); }
+.act-btn.del:hover { background:#fef2f2; color:var(--danger); }
+
+.gantt-wrap { flex:1; overflow:auto; padding:0 20px 16px; display:none; }
+.gantt-inner { background:var(--card); border-radius:var(--radius); border:1px solid var(--border); box-shadow:var(--shadow); overflow:auto; max-height:calc(100vh - 360px); }
+.gantt-header { display:flex; position:sticky; top:0; z-index:2; background:#fafbfd; border-bottom:2px solid var(--border); }
+.gantt-label-col { width:280px; flex-shrink:0; padding:8px 14px; font-weight:700; font-size:10px; color:var(--text-secondary); border-right:1px solid var(--border); }
+.gantt-timeline { flex:1; overflow-x:auto; }
+.gantt-month { display:flex; border-bottom:1px solid var(--border); }
+.gantt-month-cell { padding:5px 0; text-align:center; font-size:10px; font-weight:600; color:var(--text-secondary); border-right:1px solid #f1f3f7; }
+.gantt-day { display:flex; }
+.gantt-day-cell { padding:3px 0; text-align:center; font-size:8px; color:#bbb; border-right:1px solid #fafbfc; }
+.gantt-body { }
+.gantt-row { display:flex; border-bottom:1px solid #f5f6f8; min-height:34px; align-items:center; }
+.gantt-row:hover { background:#fafbfd; }
+.gantt-row.phase-sep { background:#f8f9fd; font-weight:700; color:var(--primary); font-size:12px; }
+.gantt-row-label { width:280px; flex-shrink:0; padding:7px 12px; font-size:12px; border-right:1px solid var(--border); display:flex; align-items:center; gap:5px; overflow:hidden; white-space:nowrap; }
+.gantt-row-bar-wrap { flex:1; position:relative; height:100%; }
+.gantt-bar { position:absolute; top:50%; transform:translateY(-50%); height:16px; border-radius:8px; min-width:3px; cursor:pointer; display:flex; align-items:center; padding:0 6px; font-size:8px; color:#fff; font-weight:600; white-space:nowrap; overflow:hidden; }
+.gantt-bar:hover { filter:brightness(0.85); }
+.gantt-bar.completed { background:linear-gradient(135deg,#22c55e,#16a34a); }
+.gantt-bar.in-progress { background:linear-gradient(135deg,#4f6ef7,#6366f1); }
+.gantt-bar.delayed { background:linear-gradient(135deg,#f59e0b,#d97706); }
+.gantt-bar.not-started { background:linear-gradient(135deg,#cbd5e1,#94a3b8); }
+
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,.4); z-index:200; align-items:center; justify-content:center; backdrop-filter:blur(2px); }
+.modal-overlay.show { display:flex; }
+.modal { background:var(--card); border-radius:14px; padding:24px; width:560px; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.15); animation:modalIn .2s ease-out; }
+@keyframes modalIn { from{opacity:0;transform:scale(.96) translateY(8px);} to{opacity:1;transform:scale(1) translateY(0);} }
+.modal h3 { font-size:17px; margin-bottom:18px; font-weight:700; }
+.modal .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.modal .form-grid .full { grid-column:span 2; }
+.modal .form-group { display:flex; flex-direction:column; gap:4px; }
+.modal .form-group label { font-size:11px; font-weight:600; color:var(--text-secondary); letter-spacing:.3px; }
+.modal .form-group input, .modal .form-group select, .modal .form-group textarea { padding:8px 11px; border:1px solid var(--border); border-radius:6px; font-size:13px; font-family:inherit; outline:none; transition:var(--transition); background:#fafbfc; }
+.modal .form-group input:focus, .modal .form-group select:focus, .modal .form-group textarea:focus { border-color:var(--primary); background:#fff; box-shadow:0 0 0 3px rgba(79,110,247,.08); }
+.modal .form-group textarea { resize:vertical; min-height:56px; }
+.modal .form-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; padding-top:14px; border-top:1px solid var(--border); }
+.toast { position:fixed; bottom:32px; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; padding:10px 22px; border-radius:8px; font-size:13px; z-index:300; opacity:0; transition:opacity .3s; pointer-events:none; box-shadow:0 8px 24px rgba(0,0,0,.2); }
+.toast.show { opacity:1; }
+
+.pick-row { display:flex; gap:6px; align-items:center; }
+.pick-row input, .pick-row textarea { flex:1; }
+.pick-btn { padding:5px 10px; border-radius:5px; font-size:11px; cursor:pointer; border:1px solid var(--primary); background:var(--primary-light); color:var(--primary); font-weight:500; white-space:nowrap; transition:var(--transition); }
+.pick-btn:hover { background:#dde3fc; }
+.pick-panel { display:none; border:1px solid var(--border); border-radius:8px; background:#fff; max-height:180px; overflow-y:auto; margin-top:4px; box-shadow:0 4px 12px rgba(0,0,0,.06); }
+.pick-panel.show { display:block; }
+.pick-item { padding:6px 10px; cursor:pointer; font-size:12px; display:flex; align-items:center; gap:7px; border-bottom:1px solid #f5f6f8; transition:var(--transition); }
+.pick-item:last-child { border-bottom:none; }
+.pick-item:hover { background:var(--primary-light); }
+.pick-item input[type=checkbox] { width:14px; height:14px; accent-color:var(--primary); cursor:pointer; }
+.pick-item .pick-seq { font-size:10px; color:#94a3b8; min-width:32px; }
+.pick-item .pick-name { flex:1; }
+.pick-filter { padding:6px 8px; border-bottom:1px solid var(--border); position:sticky; top:0; background:#fff; }
+.pick-filter input { width:100%; padding:5px 8px; border:1px solid var(--border); border-radius:5px; font-size:11px; outline:none; }
+.pick-filter input:focus { border-color:var(--primary); }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-left">
+    <div class="logo">📋</div>
+    <h1>项目管理看板</h1>
+    <span style="margin-left:16px;font-size:12px;color:var(--text-secondary);" id="userBar">
+      👤 <span id="userDisplay">-</span> |
+      📊 <span id="projectQuota">-/10</span> |
+      💾 <span id="kbQuota">-/100MB</span>
+    </span>
+  </div>
+  <div class="navbar-right">
+    <button class="btn btn-sm" onclick="openProjectModal()">＋ 新建项目</button>
+    <button class="btn btn-sm" style="background:#fff8eb;color:#b45309;border-color:#fde68a;" onclick="resetDemoData()">🔄 重置演示数据</button>
+    <button class="btn btn-sm" onclick="toggleView()" id="viewToggleBtn">📊 甘特图</button>
+    <button class="btn btn-primary btn-sm" onclick="exportToExcel()">📥 导出报表</button>
+    <button class="btn btn-sm" onclick="openChangePwdModal()" style="background:var(--primary-light);color:var(--primary);border-color:var(--primary-light);">🔑 修改密码</button>
+    <button class="btn btn-sm" onclick="logout();window.location.href='login.html'">退出</button>
+  </div>
+</nav>
+
+<div class="main-layout">
+  <aside class="sidebar">
+    <div class="sidebar-sec">
+      <div class="sidebar-label">当前项目</div>
+      <div class="project-select" id="projectSelect">
+        <div class="project-current" onclick="toggleProjectDropdown()">
+          <span id="currentProjectName">浦东清单</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="project-dropdown" id="projectDropdown"></div>
+      </div>
+    </div>
+    <div class="sidebar-sec">
+      <div class="sidebar-label">
+        开发阶段
+        <button class="btn btn-sm" style="padding:2px 8px;font-size:10px;" onclick="openPhaseModal()">＋</button>
+      </div>
+      <div class="phase-list" id="phaseList"></div>
+    </div>
+    <div class="sidebar-sec">
+      <div class="sidebar-label">进度筛选</div>
+      <div id="statusChips" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
+    </div>
+    <div class="sidebar-sec">
+      <div class="sidebar-label">
+        知识库
+        <button class="btn btn-sm" style="padding:2px 8px;font-size:10px;" onclick="openKbModal()">＋</button>
+      </div>
+      <div id="kbContent" style="flex:1;overflow-y:auto;min-height:0;"></div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="stats-panel" id="statsPanel"></div>
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="icon">🔍</span>
+        <input type="text" placeholder="搜索任务/备注/前置..." oninput="refresh()" id="searchInput">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openTaskModal()">＋ 添加任务</button>
+      <button class="btn btn-sm" onclick="autoNumber()" title="按层级自动重编序号">🔢 自动编号</button>
+      <button class="btn btn-sm" onclick="expandAll()">展开</button>
+      <button class="btn btn-sm" onclick="collapseAll()">折叠</button>
+      <span style="border-left:1px solid var(--border);height:22px;align-self:center;"></span>
+      <button class="btn btn-sm" onclick="selectAllTasks()" id="selectAllBtn">☐ 全选</button>
+      <button class="btn btn-primary btn-sm" onclick="openBatchFillModal()">✎ 批量填充</button>
+      <span style="border-left:1px solid var(--border);height:22px;align-self:center;"></span>
+      <button class="btn btn-sm btn-warn" onclick="autoSchedulePhase()" title="根据阶段时间+依赖关系自动计算排期">🕐 自动排期</button>
+      <button class="btn btn-sm" onclick="autoLinkPhases()" title="为每个阶段的顶级任务自动设置前置依赖：上一阶段的最后子任务">🔗 补全前置</button>
+      <button class="btn btn-sm" onclick="autoLinkOutputs()" title="将上一阶段的所有产出汇总到当前阶段顶级任务的备注中">📎 关联产出</button>
+      <div class="spacer"></div>
+    </div>
+
+    <div class="table-wrap" id="tableView">
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th class="chk-col"><input type="checkbox" onclick="toggleSelectAll(this)" id="selectAllCheckbox" title="全选/取消全选"></th>
+            <th style="width:52px;">序号</th>
+            <th style="min-width:200px;">任务名称</th>
+            <th style="width:65px;">工期</th>
+            <th style="width:108px;">开始时间</th>
+            <th style="width:108px;">计划完成</th>
+            <th style="width:108px;">实际完成</th>
+            <th style="min-width:140px;">前置任务</th>
+            <th style="min-width:180px;">备注/输入输出</th>
+            <th style="width:85px;">进度</th>
+            <th style="width:100px;">操作</th>
+          </tr></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="gantt-wrap" id="ganttView">
+      <div class="gantt-inner" id="ganttContainer"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Modals -->
+<div class="modal-overlay" id="taskModal">
+  <div class="modal">
+    <h3 id="taskModalTitle">添加任务</h3>
+    <div class="form-grid">
+      <div class="form-group full"><label>所属阶段</label><select id="taskPhase" onchange="buildParentOptions()"></select></div>
+      <div class="form-group"><label>序号</label><input type="text" id="taskSeq" placeholder="如 1.1"></div>
+      <div class="form-group"><label>工期 / 天</label><input type="number" id="taskDuration" placeholder="15"></div>
+      <div class="form-group"><label>开始时间</label><input type="date" id="taskStart"></div>
+      <div class="form-group"><label>计划完成</label><input type="date" id="taskPlanEnd"></div>
+      <div class="form-group"><label>实际完成</label><input type="date" id="taskActualEnd"></div>
+      <div class="form-group"><label>进度</label><select id="taskStatus"><option value="未开始">未开始</option><option value="进行中">进行中</option><option value="已完成">已完成</option><option value="延期">延期</option></select></div>
+      <div class="form-group">
+      <label>前置任务</label>
+      <div class="pick-row"><input type="text" id="taskPredecessor" placeholder="如：需求分析与确定"><button type="button" class="pick-btn" onclick="togglePredPicker()">选择</button></div>
+      <div class="pick-panel" id="predPicker">
+        <div class="pick-filter"><input type="text" placeholder="筛选任务..." oninput="filterPredPicker(this.value)"></div>
+        <div id="predPickerList"></div>
+      </div></div>
+      <div class="form-group"><label>父任务</label><select id="taskParent"><option value="">无</option></select></div>
+      <div class="form-group full"><label>任务名称</label><input type="text" id="taskName" placeholder="任务名称"></div>
+      <div class="form-group full"><label>备注 / 输入输出</label>
+      <div class="pick-row"><textarea id="taskNote" placeholder="如：输出产品需求文档"></textarea><button type="button" class="pick-btn" style="align-self:flex-start;margin-top:2px;" onclick="toggleNotePicker()">从产出选</button></div>
+      <div class="pick-panel" id="notePicker">
+        <div class="pick-filter"><input type="text" placeholder="筛选产出..." oninput="filterNotePicker(this.value)"></div>
+        <div id="notePickerList"></div>
+      </div></div>
+    </div>
+    <input type="hidden" id="taskEditIndex" value="-1">
+    <div class="form-actions">
+      <button class="btn" onclick="closeTaskModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveTask()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="phaseModal">
+  <div class="modal" style="width:480px;">
+    <h3 id="phaseModalTitle">新建阶段</h3>
+    <div class="form-grid">
+      <div class="form-group full"><label>阶段名称</label><input type="text" id="phaseName" placeholder="如：功能开发与优化"></div>
+      <div class="form-group"><label>计划开始</label><input type="date" id="phaseStart"></div>
+      <div class="form-group"><label>计划结束</label><input type="date" id="phaseEnd"></div>
+    </div>
+    <input type="hidden" id="phaseEditIndex" value="-1">
+    <div class="form-actions">
+      <button class="btn" onclick="closePhaseModal()">取消</button>
+      <button class="btn btn-primary" onclick="savePhase()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="projectModal">
+  <div class="modal" style="width:440px;">
+    <h3 id="projectModalTitle">新建项目</h3>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>项目名称</label>
+      <input type="text" id="projectNameInput" placeholder="如：浦东项目">
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>描述</label>
+      <textarea id="projectDesc" placeholder="项目简要描述..." style="resize:vertical;min-height:60px;"></textarea>
+    </div>
+    <input type="hidden" id="projectEditId" value="">
+    <div class="form-actions">
+      <button class="btn" onclick="closeProjectModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveProject()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="batchFillModal">
+  <div class="modal" style="width:440px;">
+    <h3>批量填充</h3>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;" id="batchSelectedInfo"></p>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label><input type="checkbox" id="batchFillStatus" onchange="batchToggleStatus()"> 填充状态</label>
+      <select id="batchStatusSelect" style="margin-top:6px;" disabled>
+        <option value="未开始">未开始</option>
+        <option value="进行中">进行中</option>
+        <option value="已完成">已完成</option>
+        <option value="延期">延期</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label><input type="checkbox" id="batchFillDate" onchange="batchToggleDate()"> 填充完成时间</label>
+      <input type="date" id="batchDateInput" style="margin-top:6px;" disabled>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label><input type="checkbox" id="batchFillBoth" onchange="batchToggleBoth()"> 同时填充状态和完成时间</label>
+    </div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeBatchFillModal()">取消</button>
+      <button class="btn btn-primary" onclick="applyBatchFill()">应用到选中任务</button>
+    </div>
+  </div>
+</div>
+
+<!-- Knowledge Base Modal -->
+<div class="modal-overlay" id="kbModal">
+  <div class="modal" style="width:480px;">
+    <h3 id="kbModalTitle">添加知识库条目</h3>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label>分类</label>
+      <div style="display:flex;gap:6px;">
+        <select id="kbCategory" style="flex:1;"></select>
+        <button class="btn btn-sm" onclick="addKbCategory()" title="新建分类">＋ 分类</button>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label>名称</label>
+      <input type="text" id="kbName" placeholder="如：需求文档V3、参考链接">
+    </div>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label>类型</label>
+      <select id="kbType" onchange="kbTypeChange()">
+        <option value="file">📄 文件</option>
+        <option value="link">🔗 链接</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;" id="kbFileGroup">
+      <label>选择文件</label>
+      <input type="file" id="kbFileInput" style="width:100%;">
+    </div>
+    <div class="form-group" style="margin-bottom:12px;display:none;" id="kbLinkGroup">
+      <label>链接地址</label>
+      <input type="url" id="kbUrl" placeholder="https://...">
+    </div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeKbModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveKbItem()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div class="modal-overlay" id="changePwdModal">
+  <div class="modal" style="width:400px;">
+    <h3>🔑 修改密码</h3>
+    <div class="form-group"><label>当前密码</label><input type="password" id="changeOldPwd" placeholder="请输入当前密码"></div>
+    <div class="form-group"><label>新密码</label><input type="password" id="changeNewPwd" placeholder="至少6位"></div>
+    <div class="form-group"><label>确认新密码</label><input type="password" id="changeConfirmPwd" placeholder="再次输入新密码"></div>
+    <div class="error-msg" id="changePwdError" style="font-size:12px;min-height:18px;"></div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeChangePwdModal()">取消</button>
+      <button class="btn btn-primary" onclick="handleChangePassword()">💾 更新密码</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ==================== AUTH GUARD ==================== */
+(function() {
+  if (!getSession()) {
+    window.location.href = 'login.html';
+    return;
+  }
+})();
+
+/* ==================== CHANGE PASSWORD ==================== */
+window.openChangePwdModal = function() {
+  document.getElementById('changeOldPwd').value = '';
+  document.getElementById('changeNewPwd').value = '';
+  document.getElementById('changeConfirmPwd').value = '';
+  document.getElementById('changePwdError').textContent = '';
+  document.getElementById('changePwdModal').classList.add('show');
+};
+window.closeChangePwdModal = function() {
+  document.getElementById('changePwdModal').classList.remove('show');
+};
+window.handleChangePassword = async function() {
+  const oldPwd = document.getElementById('changeOldPwd').value;
+  const newPwd = document.getElementById('changeNewPwd').value;
+  const confirmPwd = document.getElementById('changeConfirmPwd').value;
+  const errEl = document.getElementById('changePwdError');
+  errEl.textContent = '';
+
+  if (!oldPwd) { errEl.textContent = '请输入当前密码'; return; }
+  if (!newPwd || newPwd.length < 6) { errEl.textContent = '新密码至少6位'; return; }
+  if (newPwd !== confirmPwd) { errEl.textContent = '两次密码不一致'; return; }
+  if (oldPwd === newPwd) { errEl.textContent = '新密码不能与当前密码相同'; return; }
+
+  const session = getSession();
+  if (!session) { errEl.textContent = '会话已过期，请重新登录'; return; }
+
+  try {
+    await changePassword(session.accountId, oldPwd, newPwd);
+    closeChangePwdModal();
+    showToast('✅ 密码已更新');
+  } catch(e) {
+    errEl.textContent = e.message || '修改失败';
+  }
+};
+
+/* ==================== DATA ==================== */
+let nextId = 1000;
+function genId() { return 'id_' + (nextId++); }
+
+let projects = [];
+let currentProjectId = 'p1';
+let phases = [];
+let tasks = [];
+let knowledgeItems = [];
+let kbCategories = ['默认分类'];
+let kbCollapsedCats = new Set();
+
+/* ==================== IndexedDB 知识库存储 (accountId 隔离) ==================== */
+// Initialize pm_data database
+function initDataDB() {
+  return DB.open('pm_data', 2, [
+    { name: 'projects', keyPath: 'id', indices: [{ name: 'accountId', keyPath: 'accountId' }] },
+    { name: 'phases', keyPath: 'id', indices: [{ name: 'accountId', keyPath: 'accountId' }, { name: 'projectId', keyPath: 'projectId' }] },
+    { name: 'tasks', keyPath: 'id', indices: [{ name: 'accountId', keyPath: 'accountId' }, { name: 'phaseId', keyPath: 'phaseId' }, { name: 'parentId', keyPath: 'parentId' }] },
+    { name: 'kb_items', keyPath: 'id', indices: [{ name: 'accountId', keyPath: 'accountId' }, { name: 'category', keyPath: 'category' }] },
+    { name: 'kb_files', keyPath: 'id', indices: [{ name: 'accountId', keyPath: 'accountId' }] }
+  ]);
+}
+
+async function kbSaveItem(item) {
+  const session = getSession();
+  if (!session) return;
+  item.accountId = session.accountId;
+  await DB.put('pm_data', 'kb_files', item);
+}
+
+async function kbLoadAll() {
+  const session = getSession();
+  if (!session) return [];
+  try {
+    const items = await DB.getAllByIndex('pm_data', 'kb_files', 'accountId', session.accountId);
+    return items.map(r => ({
+      id: r.id, category: r.category, name: r.name,
+      type: r.type, size: r.size, addedAt: r.addedAt, path: r.path
+    }));
+  } catch(e) { console.warn('kbLoadAll error:', e); return []; }
+}
+
+async function kbGetFile(id) {
+  const file = await DB.getById('pm_data', 'kb_files', id);
+  if (!file) throw new Error('文件不存在');
+  return { blob: file.blob, name: file.name, type: file.type };
+}
+
+async function kbDeleteItem(id) {
+  await DB.delete('pm_data', 'kb_files', id);
+}
+
+async function kbDeleteCategory(cat) {
+  const session = getSession();
+  if (!session) return;
+  try {
+    const items = await DB.getAllByIndex('pm_data', 'kb_files', 'accountId', session.accountId);
+    for (const item of items) {
+      if (item.category === cat) {
+        await DB.delete('pm_data', 'kb_files', item.id);
+      }
+    }
+  } catch(e) { console.warn('kbDeleteCategory error:', e); }
+}
+
+async function kbMigrateFromLocal() {
+  const session = getSession();
+  if (!session) return false;
+  const oldItems = localStorage.getItem('pm_kb_items');
+  if (!oldItems) return false;
+  try {
+    const existingCount = await DB.count('pm_data', 'kb_files', 'accountId', session.accountId);
+    if (existingCount > 0) return false;
+    const items = JSON.parse(oldItems);
+    for (const item of items) {
+      if (item.type === 'file' && item.path && item.path.startsWith('data:')) {
+        try {
+          const [meta, b64] = item.path.split(',');
+          const mime = meta.match(/data:([^;]+)/)?.[1] || 'application/octet-stream';
+          const bytes = atob(b64);
+          const arr = new Uint8Array(bytes.length);
+          for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+          const blob = new Blob([arr], { type: mime });
+          await kbSaveItem({
+            id: item.id, category: item.category, name: item.name,
+            type: item.type, blob: blob, size: item.size,
+            addedAt: item.addedAt
+          });
+        } catch(e) { console.warn('迁移文件失败:', item.name, e); }
+      } else if (item.type === 'link') {
+        await kbSaveItem({
+          id: item.id, category: item.category, name: item.name,
+          type: item.type, blob: null, size: 0, path: item.path,
+          addedAt: item.addedAt
+        });
+      }
+    }
+    // Don't remove localStorage data until projects are also migrated
+    return true;
+  } catch(e) { console.warn('知识库数据迁移失败:', e); return false; }
+}
+
+/* ==================== pred → predIds 数据迁移 ==================== */
+function migratePredToIds() {
+  // 检测是否存在 pred 字段
+  const hasPred = tasks.some(t => t.pred !== undefined);
+  if (!hasPred) return; // 已迁移或无需迁移
+  // 构建名称→id映射
+  const nameMap = {};
+  tasks.forEach(t => { nameMap[t.name] = t.id; });
+  tasks.forEach(t => {
+    if (t.pred && t.pred.trim()) {
+      const names = parsePredNames(t.pred);
+      const ids = names.map(n => nameMap[n] || n).filter(Boolean);
+      t.predIds = ids.join(',');
+    } else {
+      t.predIds = '';
+    }
+    delete t.pred; // 删除旧字段
+  });
+  // 同时迁移默认数据中的 pred 字段（如果还存在）
+  saveToLocal();
+}
+
+function parsePredIds(predIds) {
+  if (!predIds || !predIds.trim()) return [];
+  return predIds.split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+}
+
+/* ==================== 不变的任务模板（新项目自动复制） ==================== */
+const TASK_TEMPLATE = [
+  { seq:'1', name:'需求分析与确定', dur:15, note:'', lv:0, parentId:'' },
+  { seq:'1.1', name:'产品需求分析', dur:15, note:'', lv:1, parentId:'_p0' },
+  { seq:'1.2', name:'产品需求列表', dur:5, note:'输出产品需求文档', lv:1, parentId:'_p0' },
+  { seq:'2', name:'产品设计/概要设计', dur:15, note:'', lv:0, parentId:'' },
+  { seq:'2.1', name:'总体设计', dur:10, note:'输出总体设计说明书', lv:1, parentId:'_p3' },
+  { seq:'2.2', name:'概要设计', dur:5, note:'输出概要设计说明书', lv:1, parentId:'_p3' },
+  { seq:'3', name:'UI设计', dur:16, note:'', lv:0, parentId:'' },
+  { seq:'3.1', name:'原型设计', dur:8, note:'输出原型设计稿', lv:1, parentId:'_p6' },
+  { seq:'3.2', name:'UI高保真设计', dur:8, note:'输出UI设计稿', lv:1, parentId:'_p6' },
+  { seq:'4', name:'软件架构', dur:10, note:'', lv:0, parentId:'' },
+  { seq:'4.1', name:'软件环境搭建', dur:10, note:'', lv:1, parentId:'_p9' },
+  { seq:'5', name:'编码', dur:23, note:'', lv:0, parentId:'' },
+  { seq:'5.1', name:'运维监测平台', dur:23, note:'', lv:1, parentId:'_p11' },
+  { seq:'5.1.1', name:'基础功能', dur:15, note:'', lv:2, parentId:'_p12' },
+  { seq:'5.1.1', name:'登录/退出/会话超时', dur:15, note:'', lv:3, parentId:'_p13' },
+  { seq:'6', name:'联调', dur:14, note:'', lv:0, parentId:'' },
+  { seq:'6.1', name:'整体联调', dur:14, note:'', lv:1, parentId:'_p15' },
+  { seq:'7', name:'测试与测试报告', dur:11, note:'', lv:0, parentId:'' },
+  { seq:'7.1', name:'研发内部集成测试', dur:11, note:'', lv:1, parentId:'_p17' },
+  { seq:'7.1.1', name:'研发内部测试与bug提交', dur:7, note:'', lv:2, parentId:'_p18' },
+  { seq:'7.1.2', name:'研发内部bugfix', dur:4, note:'', lv:2, parentId:'_p18' },
+  { seq:'7.2', name:'产品测试', dur:38, note:'', lv:1, parentId:'_p17' },
+  { seq:'7.2.1', name:'测试用例', dur:5, note:'输出测试用例', lv:2, parentId:'_p21' },
+  { seq:'7.2.2', name:'系统测试', dur:10, note:'', lv:2, parentId:'_p21' },
+  { seq:'7.2.3', name:'性能测试', dur:5, note:'输出性能测试报告', lv:2, parentId:'_p21' },
+  { seq:'7.2.4', name:'回归测试', dur:5, note:'输出bug清单', lv:2, parentId:'_p21' },
+  { seq:'7.2.5', name:'测试报告', dur:13, note:'输出测试报告', lv:2, parentId:'_p21' },
+  { seq:'8', name:'产品化', dur:60, note:'', lv:0, parentId:'' },
+  { seq:'8.1', name:'软件使用手册/FAQ', dur:10, note:'输出软件操作手册', lv:1, parentId:'_p27' }
+];
+/* ==================== STATE ==================== */
+let activeStatus = 'all';
+let currentView = 'table';
+let collapsedPhases = new Set();
+let collapsedTasks = new Set();
+let selectedTasks = new Set();
+
+/* ==================== HELPERS ==================== */
+function currentProject() { return projects.find(p => p.id === currentProjectId); }
+function projectPhases() { return phases.filter(p => p.projectId === currentProjectId); }
+function phaseTasks(phaseId) { return tasks.filter(t => t.phaseId === phaseId); }
+
+function getFilteredTasks() {
+  let r = tasks.filter(t => {
+    const ph = phases.find(p => p.id === t.phaseId);
+    return ph && ph.projectId === currentProjectId;
+  });
+  if (activeStatus !== 'all') r = r.filter(t => t.status === activeStatus);
+  const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+  if (q) r = r.filter(t => t.name.toLowerCase().includes(q) || t.note.toLowerCase().includes(q) || (t.predIds||'').toLowerCase().includes(q));
+  return r;
+}
+
+function getChildren(taskId) {
+  const result = [];
+  for (const t of tasks) { if (t.parentId === taskId) { result.push(t.id); result.push(...getChildren(t.id)); } }
+  return result;
+}
+
+function addDays(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function dateDiff(d1, d2) { return Math.ceil((new Date(d2) - new Date(d1)) / (1000*60*60*24)); }
+
+/* ==================== AUTO NUMBER ==================== */
+function autoNumber() {
+  const plist = projectPhases();
+  const phaseOrder = plist.map(p => p.id);
+  const allCurrent = tasks.filter(t => phaseOrder.includes(t.phaseId));
+
+  // Group top-level tasks per phase
+  plist.forEach(ph => {
+    const top = allCurrent.filter(t => t.phaseId === ph.id && t.lv === 0);
+    top.forEach((t, i) => {
+      const base = (i + 1).toString();
+      t.seq = base;
+      renumberChildren(t.id, base);
+    });
+  });
+
+  refresh();
+  showToast('序号已按层级自动重编');
+}
+
+function renumberChildren(parentId, base) {
+  const children = tasks.filter(t => t.parentId === parentId);
+  children.forEach((t, i) => {
+    t.seq = base + '.' + (i + 1);
+    renumberChildren(t.id, t.seq);
+  });
+}
+
+/* ==================== PROJECT ==================== */
+function toggleProjectDropdown() { document.getElementById('projectDropdown').classList.toggle('show'); }
+function renderProjectDropdown() {
+  const dd = document.getElementById('projectDropdown');
+  let h = '';
+  projects.forEach(p => {
+    h += `<div class="item${p.id===currentProjectId?' active':''}" onclick="switchProject('${p.id}')">📁 ${p.name}${p.id===currentProjectId?' <span class="check">✓</span>':''}</div>`;
+  });
+  h += `<div class="divider"></div><div class="item add" onclick="openProjectModal()">＋ 新建项目</div>`;
+  dd.innerHTML = h;
+}
+function switchProject(pid) {
+  currentProjectId = pid;
+  collapsedPhases.clear();
+  collapsedTasks.clear();
+  selectedTasks.clear();
+  document.getElementById('projectDropdown').classList.remove('show');
+  saveToLocal();
+    refreshAll();
+}
+
+function openProjectModal(editId) {
+  document.getElementById('projectEditId').value = editId || '';
+  if (editId) {
+    const p = projects.find(x => x.id === editId);
+    document.getElementById('projectNameInput').value = p.name;
+    document.getElementById('projectDesc').value = p.desc || '';
+    document.getElementById('projectModalTitle').textContent = '编辑项目';
+  } else {
+    document.getElementById('projectNameInput').value = '';
+    document.getElementById('projectDesc').value = '';
+    document.getElementById('projectModalTitle').textContent = '新建项目';
+  }
+  document.getElementById('projectModal').classList.add('show');
+}
+function closeProjectModal() { document.getElementById('projectModal').classList.remove('show'); }
+async function saveProject() {
+  try {
+  const name = document.getElementById('projectNameInput').value.trim();
+  if (!name) { showToast('请输入项目名称'); return; }
+  const editId = document.getElementById('projectEditId').value;
+  if (editId) {
+    const p = projects.find(x => x.id === editId);
+    p.name = name; p.desc = document.getElementById('projectDesc').value.trim();
+    closeProjectModal();
+    refreshAll();
+    showToast('项目已更新');
+  } else {
+    // Quota check
+    const session = getSession();
+    if (session) {
+      const count = await DB.count('pm_data', 'projects', 'accountId', session.accountId);
+      const cfg = await Config.getEffectiveQuota(session.accountId);
+      if (count >= cfg.projectQuota) { showToast('已达到项目上限（' + cfg.projectQuota + '个），请先删除不需要的项目'); return; }
+    }
+    const np = { id: genId(), name, desc: document.getElementById('projectDesc').value.trim() };
+    projects.push(np);
+    const newPhaseId = genId();
+    phases.push({ id: newPhaseId, projectId: np.id, name: '阶段一', start: '', end: '' });
+    const beforeCount = tasks.length;
+    cloneTemplateTasks(newPhaseId);
+    const afterCount = tasks.length;
+    console.log('[saveProject] 模板克隆完成：任务数 ' + beforeCount + ' → ' + afterCount + ' (新增 ' + (afterCount - beforeCount) + ' 个)');
+    currentProjectId = np.id;
+    closeProjectModal();
+    refreshAll();
+    showToast('项目已创建，已自动复制 ' + (afterCount - beforeCount) + ' 个阶段任务');
+  }
+  } catch(e) { console.error('[saveProject] 错误:', e); showToast('项目创建失败：' + e.message); }
+}
+
+/* 重置所有数据到初始演示状态 */
+function resetDemoData() {
+  if (!confirm('确定要删除所有数据并恢复为初始演示数据吗？\n当前所有项目、阶段、任务将被清空。')) return;
+  // Clear localStorage
+  localStorage.removeItem('pm_projects');
+  localStorage.removeItem('pm_phases');
+  localStorage.removeItem('pm_tasks');
+  localStorage.removeItem('pm_currentProjectId');
+  localStorage.removeItem('pm_kb_categories');
+  // Reset in-memory
+  projects = [{ id: 'p1', name: '示例项目', desc: '演示项目开发管理' }];
+  phases = [
+    { id: 'ph1', projectId: 'p1', name: '阶段一 功能开发和优化', start: '2023-08-24', end: '2023-10-31' },
+    { id: 'ph2', projectId: 'p1', name: '阶段二 问题修复与新功能开发', start: '2023-11-01', end: '2023-12-30' }
+  ];
+  // Use TASK_TEMPLATE to generate demo tasks for ph1 and ph2
+  tasks.length = 0;
+  const tplCopy1 = JSON.parse(JSON.stringify(TASK_TEMPLATE));
+  // Create ph1 tasks with original IDs
+  const ph1Ids = ['t1','t2','t3','t4','t5','t6','t7','t8','t9','t10','t11','t12','t13','t14','t15','t16','t17','t18','t19','t20','t21','t22','t23','t24','t25','t26','t27','t28','t29'];
+  const idMap1 = {};
+  tplCopy1.forEach((t, i) => {
+    const tid = ph1Ids[i];
+    idMap1['_p'+i] = tid;
+    const start = i < 5 ? ['2023-08-24','2023-08-24','2023-09-04','2023-09-11','2023-09-11'][Math.min(i,4)] || '' : '';
+    const planEnd = i < 5 ? ['2023-09-08','2023-09-08','2023-09-08','2023-09-26','2023-09-21'][Math.min(i,4)] || '' : '';
+    const actualEnd = i < 3 ? ['2023-09-08','2023-09-08','2023-09-08'][i] || '' : (i === 7 || i === 8 ? ['2023-09-19','2023-09-27'][i-7] : '');
+    const status = i < 3 ? '已完成' : (i === 7 || i === 8 ? '已完成' : (i >= 3 && i <= 5 ? '延期' : (i >= 9 && i <= 14 ? '进行中' : '未开始')));
+    tasks.push({ id: tid, phaseId: 'ph1', seq: t.seq, name: t.name, dur: t.dur,
+      start: start, planEnd: planEnd, actualEnd: actualEnd, predIds: '',
+      note: t.note, status: status, lv: t.lv, parentId: '' });
+  });
+  // Remap parentIds for ph1
+  tasks.forEach(t => {
+    if (t.phaseId === 'ph1' && !t.parentId) {
+      const idx = tplCopy1.findIndex(tmpl => tmpl.seq === t.seq && tmpl.name === t.name);
+      if (idx >= 0 && tplCopy1[idx].parentId) {
+        t.parentId = idMap1[tplCopy1[idx].parentId] || '';
+      }
+    }
+  });
+  // Set predIds for specific tasks
+  (()=>{
+    const byName = {}; tasks.forEach(t => { byName[t.name] = t.id; });
+    const setPred = (name, predName) => { const t = tasks.find(x => x.name === name); if(t) t.predIds = byName[predName] || ''; };
+    setPred('产品设计/概要设计', '需求分析与确定');
+    setPred('UI设计', '概要设计');
+    setPred('软件架构', '总体设计');
+  })();
+  // Clone for ph2
+  const tplCopy2 = JSON.parse(JSON.stringify(TASK_TEMPLATE));
+  const ph2Ids = ['t30','t31','t32','t33','t34','t35','t36','t37','t38','t39','t40','t41','t42','t43','t44','t45','t46','t47','t48','t49','t50','t51','t52','t53','t54','t55','t56','t57','t58'];
+  const idMap2 = {};
+  tplCopy2.forEach((t, i) => {
+    const tid = ph2Ids[i];
+    idMap2['_p'+i] = tid;
+    tasks.push({ id: tid, phaseId: 'ph2', seq: t.seq, name: t.name, dur: t.dur,
+      start: '', planEnd: '', actualEnd: '', predIds: '',
+      note: t.note, status: '未开始', lv: t.lv, parentId: '' });
+  });
+  tasks.forEach(t => {
+    if (t.phaseId === 'ph2' && !t.parentId) {
+      const idx = tplCopy2.findIndex(tmpl => tmpl.seq === t.seq && tmpl.name === t.name);
+      if (idx >= 0 && tplCopy2[idx].parentId) {
+        t.parentId = idMap2[tplCopy2[idx].parentId] || '';
+      }
+    }
+  });
+  // Set ph2 predIds
+  (()=>{
+    const byName = {}; tasks.forEach(t => { byName[t.name] = t.id; });
+    const setPred = (name, predName) => { const t = tasks.find(x => x.phaseId === 'ph2' && x.name === name); if(t) t.predIds = byName[predName] || ''; };
+    setPred('需求分析与确定', '软件使用手册/FAQ'); // t30 depends on t29
+    setPred('产品设计/概要设计', '需求分析与确定'); // t33 depends on t30
+    setPred('UI设计', '概要设计'); // t36 depends on t35
+    setPred('软件架构', '总体设计'); // t39 depends on t34
+    setPred('编码', '软件使用手册/FAQ'); // t41 depends on t58
+    setPred('联调', '软件使用手册/FAQ'); // t45 depends on t58
+    setPred('测试与测试报告', '软件使用手册/FAQ'); // t47 depends on t58
+    setPred('产品化', '软件使用手册/FAQ'); // t57 depends on t58
+  })();
+  // Reset first task's note
+  const t30 = tasks.find(x => x.id === 't30'); if (t30) t30.note = '输出产品需求文档；输出总体设计说明书；输出概要设计说明书；输出原型设计稿；输出UI设计稿；输出测试用例；输出性能测试报告；输出bug清单；输出测试报告；输出软件操作手册';
+  currentProjectId = 'p1';
+  collapsedPhases.clear(); collapsedTasks.clear(); selectedTasks.clear();
+  saveToLocal();
+  refreshAll();
+  showToast('演示数据已重置，共 ' + tasks.length + ' 个任务');
+  console.log('[resetDemoData] 已重置：' + projects.length + ' 项目, ' + phases.length + ' 阶段, ' + tasks.length + ' 任务');
+}
+
+/* Clones from the immutable TASK_TEMPLATE constant — never broken by user deletions */
+function cloneTemplateTasks(newPhaseId) {
+  try {
+  if (!TASK_TEMPLATE || TASK_TEMPLATE.length === 0) { console.warn('[cloneTemplateTasks] TASK_TEMPLATE 为空或未定义'); return; }
+  console.log('[cloneTemplateTasks] 开始克隆 ' + TASK_TEMPLATE.length + ' 个模板任务到阶段 ' + newPhaseId);
+  const idMap = {};
+  // First pass: create all tasks with new IDs
+  TASK_TEMPLATE.forEach((t, i) => {
+    const newId = genId();
+    idMap['_p' + i] = newId;
+    tasks.push({
+      id: newId, phaseId: newPhaseId, seq: t.seq, name: t.name,
+      dur: t.dur, start: '', planEnd: '', actualEnd: '', predIds: '',
+      note: t.note, status: '未开始', lv: t.lv, parentId: ''
+    });
+  });
+  // Second pass: remap parentId
+  tasks.forEach(t => {
+    if (t.phaseId === newPhaseId && !t.parentId) {
+      const origIdx = TASK_TEMPLATE.findIndex(tmpl => tmpl.seq === t.seq && tmpl.name === t.name);
+      if (origIdx >= 0 && TASK_TEMPLATE[origIdx].parentId) {
+        const mapped = idMap[TASK_TEMPLATE[origIdx].parentId];
+        if (mapped) t.parentId = mapped;
+      }
+    }
+  });
+  console.log('[cloneTemplateTasks] 克隆完成');
+  } catch(e) { console.error('[cloneTemplateTasks] 错误:', e); }
+}
+
+/* ==================== PHASE ==================== */
+function renderPhaseList() {
+  const el = document.getElementById('phaseList');
+  const plist = projectPhases();
+  if (plist.length === 0) {
+    el.innerHTML = '<div style="padding:12px;color:#999;font-size:12px;text-align:center;">暂无阶段，点击上方 ＋ 添加</div>';
+    return;
+  }
+  const filteredAll = getFilteredTasks();
+  let h = '';
+  plist.forEach((p, i) => {
+    const cnt = filteredAll.filter(t => t.phaseId === p.id).length;
+    const colors = ['#4f6ef7','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4'];
+    h += `<div class="phase-item active" data-phase="${p.id}">
+      <span class="phase-dot" style="background:${colors[i%colors.length]};"></span>${p.name}
+      <span class="phase-count">${cnt}</span>
+      <span class="phase-actions">
+        <button title="编辑阶段" onclick="event.stopPropagation();openPhaseModal('${p.id}')">✎</button>
+        <button class="del" title="删除阶段" onclick="event.stopPropagation();deletePhase('${p.id}')">✕</button>
+      </span></div>`;
+  });
+  el.innerHTML = h;
+}
+
+function openPhaseModal(editId) {
+  document.getElementById('phaseEditIndex').value = editId || '';
+  if (editId) {
+    const p = phases.find(x => x.id === editId);
+    document.getElementById('phaseName').value = p.name;
+    document.getElementById('phaseStart').value = p.start || '';
+    document.getElementById('phaseEnd').value = p.end || '';
+    document.getElementById('phaseModalTitle').textContent = '编辑阶段';
+  } else {
+    document.getElementById('phaseName').value = '';
+    document.getElementById('phaseStart').value = '';
+    document.getElementById('phaseEnd').value = '';
+    document.getElementById('phaseModalTitle').textContent = '新建阶段';
+  }
+  document.getElementById('phaseModal').classList.add('show');
+}
+function closePhaseModal() { document.getElementById('phaseModal').classList.remove('show'); }
+function savePhase() {
+  const name = document.getElementById('phaseName').value.trim();
+  if (!name) { showToast('请输入阶段名称'); return; }
+  const editId = document.getElementById('phaseEditIndex').value;
+  const start = document.getElementById('phaseStart').value;
+  const end = document.getElementById('phaseEnd').value;
+  if (editId) {
+    const p = phases.find(x => x.id === editId);
+    p.name = name; p.start = start; p.end = end;
+    closePhaseModal();
+    refreshAll();
+    showToast('阶段已更新');
+  } else {
+    const newPhaseId = genId();
+    phases.push({ id: newPhaseId, projectId: currentProjectId, name, start, end });
+    // Auto-clone template tasks and link outputs from previous phase
+    cloneTemplateTasks(newPhaseId);
+    closePhaseModal();
+    refreshAll();
+    autoLinkOutputsForPhase(newPhaseId);
+    refresh();
+    showToast('阶段已创建，已复制模板任务并关联上一阶段产出');
+  }
+}
+
+function autoLinkOutputsForPhase(newPhaseId) {
+  const plist = projectPhases();
+  const idx = plist.findIndex(p => p.id === newPhaseId);
+  if (idx <= 0) return;
+  const prevTasks = phaseTasks(plist[idx - 1].id);
+  const outputs = [...new Set(prevTasks.filter(t => t.note && t.note.trim()).map(t => t.note.trim()))];
+  if (outputs.length === 0) return;
+  // Only fill the first top-level task of the new phase
+  const topTasks = phaseTasks(newPhaseId).filter(t => t.lv === 0).sort((a,b) => a.seq.localeCompare(b.seq,undefined,{numeric:true}));
+  if (topTasks.length > 0) {
+    topTasks[0].note = outputs.join('；');
+  }
+}
+function deletePhase(phaseId) {
+  const p = phases.find(x => x.id === phaseId);
+  const cnt = phaseTasks(phaseId).length;
+  if (!confirm(`删除阶段「${p.name}」及其 ${cnt} 个任务？`)) return;
+  tasks = tasks.filter(t => t.phaseId !== phaseId);
+  phases = phases.filter(x => x.id !== phaseId);
+  saveToLocal();
+    refreshAll();
+  showToast('阶段已删除');
+}
+
+/* ==================== AUTO SCHEDULE ==================== */
+function autoSchedulePhase() {
+  const plist = projectPhases();
+  if (plist.length === 0) { showToast('当前项目没有阶段'); return; }
+  let updated = 0;
+  plist.forEach(ph => {
+    if (!ph.start || !ph.end) return;
+    const allPhaseTasks = phaseTasks(ph.id);
+    if (allPhaseTasks.length === 0) return;
+    const phaseStart = new Date(ph.start);
+    const phaseEnd = new Date(ph.end);
+    const topTasks = allPhaseTasks.filter(t => t.lv === 0);
+    scheduleTaskGroup(topTasks, phaseStart, phaseEnd, allPhaseTasks);
+    updated += topTasks.length;
+    topTasks.forEach(t => scheduleChildrenRecursive(t.id, allPhaseTasks, phaseEnd));
+  });
+  refresh();
+  showToast(`已自动排期 ${updated} 个顶级任务（子任务不超出父级范围）`);
+}
+
+function scheduleTaskGroup(group, groupStart, groupEnd, allPhaseTasks) {
+  if (group.length === 0) return;
+  const idMap = {};
+  allPhaseTasks.forEach(t => { idMap[t.id] = t; });
+  const scheduled = new Set();
+  const result = [];
+  let remaining = [...group];
+
+  while (remaining.length > 0) {
+    let pushed = false;
+    const nextRemaining = [];
+    for (const t of remaining) {
+      let canSchedule = true;
+      let earliestStart = new Date(groupStart);
+      if (t.predIds && t.predIds.trim()) {
+        const predIds = parsePredIds(t.predIds);
+        for (const pid of predIds) {
+          const predTask = idMap[pid];
+          if (!predTask) continue;
+          if (group.some(g => g.id === pid) && !scheduled.has(predTask.id)) {
+            canSchedule = false; break;
+          }
+          if (predTask.planEnd && new Date(predTask.planEnd) >= earliestStart) {
+            earliestStart = new Date(addDays(predTask.planEnd, 1));
+          }
+        }
+      }
+      if (canSchedule) {
+        t.start = earliestStart.toISOString().slice(0, 10);
+        const dur = Math.max(1, t.dur || 1);
+        let taskEnd = addDays(t.start, dur - 1);
+        if (new Date(taskEnd) > groupEnd) taskEnd = groupEnd.toISOString().slice(0, 10);
+        t.planEnd = taskEnd;
+        scheduled.add(t.id);
+        result.push(t);
+        pushed = true;
+      } else { nextRemaining.push(t); }
+    }
+    if (!pushed) {
+      let cursor = result.length > 0 ? new Date(addDays(result[result.length-1].planEnd, 1)) : new Date(groupStart);
+      nextRemaining.forEach(t => {
+        t.start = cursor.toISOString().slice(0, 10);
+        const dur = Math.max(1, t.dur || 1);
+        let taskEnd = addDays(t.start, dur - 1);
+        if (new Date(taskEnd) > groupEnd) taskEnd = groupEnd.toISOString().slice(0, 10);
+        t.planEnd = taskEnd;
+        cursor = new Date(addDays(taskEnd, 1));
+        scheduled.add(t.id);
+        result.push(t);
+      });
+      break;
+    }
+    remaining = nextRemaining;
+  }
+}
+
+function scheduleChildrenRecursive(parentId, allPhaseTasks, phaseEnd) {
+  const parent = tasks.find(t => t.id === parentId);
+  if (!parent || !parent.start || !parent.planEnd) return;
+  const children = allPhaseTasks.filter(t => t.parentId === parentId);
+  if (children.length === 0) return;
+  const pStart = new Date(parent.start);
+  const pEnd = new Date(parent.planEnd);
+  scheduleTaskGroup(children, pStart, pEnd, allPhaseTasks);
+  children.forEach(c => scheduleChildrenRecursive(c.id, allPhaseTasks, phaseEnd));
+}
+
+/* ==================== AUTO LINK PHASES ==================== */
+function autoLinkPhases() {
+  const plist = projectPhases();
+  if (plist.length < 2) { showToast('至少需要两个阶段才能补全前置'); return; }
+  let updated = 0;
+  for (let i = 1; i < plist.length; i++) {
+    const prevPhase = plist[i - 1];
+    const currPhase = plist[i];
+    const prevTasks = phaseTasks(prevPhase.id);
+    // Find last leaf node in previous phase
+    const leafNodes = prevTasks.filter(t => !tasks.some(c => c.parentId === t.id));
+    leafNodes.sort((a, b) => a.seq.localeCompare(b.seq, undefined, { numeric: true }));
+    if (leafNodes.length === 0) continue;
+    const lastLeaf = leafNodes[leafNodes.length - 1];
+    // Set predIds for all lv=0 tasks in current phase that have empty predIds
+    const topTasks = phaseTasks(currPhase.id).filter(t => t.lv === 0);
+    topTasks.forEach(t => {
+      if (!t.predIds || !t.predIds.trim()) {
+        t.predIds = lastLeaf.id;
+        updated++;
+      }
+    });
+  }
+  refresh();
+  showToast(`已为 ${updated} 个顶级任务补全前置 → 上一阶段最后子任务`);
+}
+function autoLinkOutputs() {
+  const plist = projectPhases();
+  if (plist.length < 2) { showToast('至少需要两个阶段才能关联产出'); return; }
+  let updated = 0;
+  for (let i = 1; i < plist.length; i++) {
+    const prevPhase = plist[i - 1];
+    const currPhase = plist[i];
+    const prevTasks = phaseTasks(prevPhase.id);
+    const outputs = [...new Set(prevTasks.filter(t => t.note && t.note.trim()).map(t => t.note.trim()))];
+    if (outputs.length === 0) continue;
+    const outputStr = outputs.join('；');
+    // Only fill the first top-level task of current phase
+    const topTasks = phaseTasks(currPhase.id).filter(t => t.lv === 0).sort((a,b) => a.seq.localeCompare(b.seq,undefined,{numeric:true}));
+    if (topTasks.length > 0) {
+      topTasks[0].note = outputStr;
+      updated++;
+    }
+  }
+  refresh();
+  showToast(`已为 ${updated} 个阶段的首个任务关联产出 → 上一阶段全部交付物`);
+}
+
+function parsePredNames(pred) {
+  return pred.split(/[,，、]/).map(s => s.replace(/^\d+(\.\d+)*[\s]*/, '').trim()).filter(Boolean);
+}
+
+/* ==================== STATS ==================== */
+function renderStats() {
+    const f = getFilteredTasks();
+    const total = f.length;
+    if (total === 0) { document.getElementById('statsPanel').innerHTML = ''; return; }
+    const comp = f.filter(t => t.status === '已完成').length;
+    const prog = f.filter(t => t.status === '进行中').length;
+    const delay = f.filter(t => t.status === '延期').length;
+    const wait = f.filter(t => t.status === '未开始').length;
+    const withPred = f.filter(t => (t.predIds||'').trim()).length;
+    const withNote = f.filter(t => t.note?.trim()).length;
+    const compPct = Math.round((comp / total) * 100);
+
+    // Section 2: Per-phase stats
+    const plist = projectPhases();
+    const phaseColors = [
+      {bg:'#eef1fd',border:'#c8d3fc',text:'#4f6ef7',bar:'#4f6ef7'},
+      {bg:'#e6f9ef',border:'#bbf7d0',text:'#15803d',bar:'#22c55e'},
+      {bg:'#fff8eb',border:'#fde68a',text:'#b45309',bar:'#f59e0b'},
+      {bg:'#fef2f2',border:'#fecaca',text:'#dc2626',bar:'#ef4444'},
+      {bg:'#f3f0ff',border:'#ddd6fe',text:'#7c3aed',bar:'#8b5cf6'},
+      {bg:'#f0f9ff',border:'#bae6fd',text:'#0369a1',bar:'#06b6d4'}
+    ];
+    let phaseCards = '';
+    plist.forEach((p, i) => {
+      const pt = f.filter(t => t.phaseId === p.id);
+      const cnt = pt.length;
+      const pComp = pt.filter(t => t.status === '已完成').length;
+      const pProg = pt.filter(t => t.status === '进行中').length;
+      const pDelay = pt.filter(t => t.status === '延期').length;
+      const pWait = pt.filter(t => t.status === '未开始').length;
+      const pc = phaseColors[i % phaseColors.length];
+      phaseCards += `<div class="phase-stat-card" style="border-left:3px solid ${pc.border}">
+        <div class="phase-stat-head">
+          <span class="phase-stat-dot" style="background:${pc.text};"></span>
+          <span class="phase-stat-name">${p.name}</span>
+          <span class="phase-stat-count">${cnt} 任务</span>
+        </div>
+        <div class="phase-stat-bars">
+          <div class="seg" style="width:${cnt?((pComp/cnt)*100):0}%;background:#22c55e;"></div>
+          <div class="seg" style="width:${cnt?((pProg/cnt)*100):0}%;background:#4f6ef7;"></div>
+          <div class="seg" style="width:${cnt?((pDelay/cnt)*100):0}%;background:#f59e0b;"></div>
+          <div class="seg" style="width:${cnt?((pWait/cnt)*100):0}%;background:#cbd5e1;"></div>
+        </div>
+        <div style="display:flex;gap:10px;font-size:10px;color:#888;">
+          <span>✅ ${pComp}</span><span>🔄 ${pProg}</span><span>⚠️ ${pDelay}</span><span>⏳ ${pWait}</span>
+        </div></div>`;
+    });
+
+    document.getElementById('statsPanel').innerHTML = `
+    <div class="stats-section">
+      <div class="stats-section-title">项目进度</div>
+      <div class="stats-row">
+        <div class="stat-card" style="grid-column:span 2;">
+          <div class="stat-icon" style="background:#eef1fd;color:#4f6ef7;">📊</div>
+          <div>
+            <div class="stat-num">${total} <span style="font-size:12px;font-weight:400;color:var(--text-secondary);">个任务</span></div>
+            <div class="stat-label">已完成 ${comp} · 进行中 ${prog} · 延期 ${delay} · 未开始 ${wait}</div>
+            <div class="stat-bar-wrap" style="margin-top:5px;">
+              <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:${compPct}%;background:linear-gradient(90deg,#22c55e,#4ade80);"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card"><div class="stat-icon" style="background:#e6f9ef;color:#22c55e;">✅</div><div><div class="stat-num">${comp}</div><div class="stat-label">已完成</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#eef1fd;color:#4f6ef7;">🔄</div><div><div class="stat-num">${prog}</div><div class="stat-label">进行中</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#fff8eb;color:#f59e0b;">⚠️</div><div><div class="stat-num">${delay}</div><div class="stat-label">延期</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#f3f0ff;color:#7c3aed;">⏳</div><div><div class="stat-num">${wait}</div><div class="stat-label">未开始</div></div></div>
+      </div>
+    </div>
+    <div class="stats-section">
+      <div class="stats-section-title">阶段统计</div>
+      <div class="stats-row">${phaseCards}</div>
+    </div>
+    <div class="stats-section">
+      <div class="stats-section-title">依赖与产出</div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-icon" style="background:#f3f0ff;color:#7c3aed;">🔗</div><div><div class="stat-num">${withPred}</div><div class="stat-label">含前置依赖</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#e6f9ef;color:#22c55e;">📄</div><div><div class="stat-num">${withNote}</div><div class="stat-label">含输出产物</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#fff8eb;color:#f59e0b;">📅</div><div><div class="stat-num">${plist.length}</div><div class="stat-label">开发阶段</div></div></div>
+      </div>
+    </div>`;
+  }
+
+/* ==================== TABLE ==================== */
+function renderTable() {
+  const filtered = getFilteredTasks();
+  const plist = projectPhases();
+  const phaseOrder = plist.map(p => p.id);
+  const sorted = [...filtered].sort((a, b) => {
+    const pa = phaseOrder.indexOf(a.phaseId), pb = phaseOrder.indexOf(b.phaseId);
+    if (pa !== pb) return pa - pb;
+    return a.seq.localeCompare(b.seq, undefined, { numeric: true });
+  });
+
+  // Build rows — ensure each phase separator appears exactly once
+  let rows = [];
+  let seenPhase = new Set();
+  sorted.forEach(t => {
+    if (!seenPhase.has(t.phaseId)) {
+      seenPhase.add(t.phaseId);
+      rows.push({ type: 'sep', phaseId: t.phaseId });
+    }
+    if (collapsedPhases.has(t.phaseId)) return;
+    if (isAncestorCollapsed(t.id)) return;
+    rows.push({ type: 'task', task: t });
+  });
+
+  const tbody = document.getElementById('tableBody');
+  let html = '';
+  if (rows.length === 0) {
+    html = `<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">📭</div><p>暂无任务</p><p style="font-size:12px;">请添加任务或调整筛选条件</p></div></td></tr>`;
+  }
+
+  rows.forEach(row => {
+    if (row.type === 'sep') {
+      const ph = phases.find(p => p.id === row.phaseId);
+      const isCollapsed = collapsedPhases.has(row.phaseId);
+      html += `<tr class="phase-sep ${isCollapsed?'collapsed':''}" onclick="togglePhase('${row.phaseId}')">
+        <td colspan="11"><span class="toggle-icon">▼</span> 📂 ${ph?.name||'未知阶段'}
+        ${ph?.start ? ` <span style="font-weight:400;font-size:11px;color:#888;">(${ph.start} → ${ph.end})</span>` : ''}
+        </td></tr>`;
+    } else {
+      const t = row.task;
+      const selClass = selectedTasks.has(t.id) ? 'checked' : '';
+      html += `<tr data-tid="${t.id}" class="${selectedTasks.has(t.id)?'row-selected':''}">
+        <td class="chk-col"><input type="checkbox" ${selClass?'checked':''} onclick="event.stopPropagation();toggleTaskSelect('${t.id}',this)"></td>
+        <td style="color:#999;font-size:11px;">${t.seq}</td>
+        <td><div class="task-name-cell" style="padding-left:${t.lv*16}px;">${getChildren(t.id).length>0?`<span class="task-toggle${collapsedTasks.has(t.id)?' collapsed':''}" onclick="event.stopPropagation();toggleTaskCollapse('${t.id}')">▼</span>`:'<span class="task-toggle leaf">▼</span>'}<span>${t.name}</span></div></td>
+        <td><input class="i-num" type="number" value="${t.dur}" onchange="updateTask('${t.id}','dur',parseInt(this.value)||0)"></td>
+        <td><input class="i-date" type="date" value="${t.start}" onchange="updateTask('${t.id}','start',this.value)"></td>
+        <td><input class="i-date" type="date" value="${t.planEnd}" onchange="updateTask('${t.id}','planEnd',this.value)"></td>
+        <td><input class="i-date" type="date" value="${t.actualEnd}" onchange="updateTask('${t.id}','actualEnd',this.value)"></td>
+        <td style="max-width:140px;">${(() => {
+          if (!t.predIds || !t.predIds.trim()) return '<span class="pred-link empty">—</span>';
+          const ids = parsePredIds(t.predIds);
+          const names = ids.map(pid => { const pt = tasks.find(x => x.id === pid); return pt ? `<span class="pred-link" onclick="event.stopPropagation();highlightDep('${pid}')">🔗 ${pt.name}</span>` : pid; });
+          return names.join('、') || '<span class="pred-link empty">—</span>';
+        })()}</td>
+        <td style="max-width:180px;">${t.note?`<span class="io-badge">📎 ${t.note}</span>`:`<span class="io-badge empty">—</span>`}</td>
+        <td><select class="i-sel" onchange="updateTask('${t.id}','status',this.value)">
+          ${['已完成','进行中','延期','未开始'].map(s=>`<option value="${s}" ${t.status===s?'selected':''}>${s}</option>`).join('')}
+        </select></td>
+        <td class="col-actions"><div class="btns">
+          <button class="act-btn edit" title="编辑" onclick="event.stopPropagation();openTaskModal('${t.id}')">✎</button>
+          <button class="act-btn add" title="子任务" onclick="event.stopPropagation();addSubTask('${t.id}')">＋</button>
+          <button class="act-btn del" title="删除" onclick="event.stopPropagation();deleteTask('${t.id}')">✕</button>
+        </div></td></tr>`;
+    }
+  });
+  tbody.innerHTML = html;
+}
+
+function highlightDep(predId) {
+  const target = tasks.find(t => t.id === predId);
+  if (target) {
+    showToast(`前置依赖：${target.name}（序号 ${target.seq}，状态：${target.status}）`);
+    const row = document.querySelector(`tr[data-tid="${target.id}"]`);
+    if (row) { row.scrollIntoView({behavior:'smooth',block:'center'}); row.style.background='#fef3c7'; setTimeout(()=>row.style.background='',1500); }
+  } else { showToast(`未找到前置任务「${predId}」`); }
+}
+
+function togglePhase(phaseId) {
+  if (collapsedPhases.has(phaseId)) collapsedPhases.delete(phaseId);
+  else collapsedPhases.add(phaseId);
+  refresh();
+}
+function expandAll() { collapsedPhases.clear(); collapsedTasks.clear(); refresh(); showToast('已展开全部'); }
+function collapseAll() { projectPhases().forEach(p => collapsedPhases.add(p.id)); tasks.filter(t=>getChildren(t.id).length>0).forEach(t=>collapsedTasks.add(t.id)); refresh(); showToast('已折叠全部'); }
+
+function isAncestorCollapsed(tid) {
+  const t = tasks.find(x => x.id === tid);
+  if (!t || !t.parentId) return false;
+  if (collapsedTasks.has(t.parentId)) return true;
+  return isAncestorCollapsed(t.parentId);
+}
+function toggleTaskCollapse(tid) {
+  if (collapsedTasks.has(tid)) collapsedTasks.delete(tid);
+  else collapsedTasks.add(tid);
+  refresh();
+}
+
+/* ==================== BATCH SELECT & FILL ==================== */
+function selectAllTasks() {
+  const filtered = getFilteredTasks();
+  const visible = filtered.filter(t => !collapsedPhases.has(t.phaseId) && !isAncestorCollapsed(t.id));
+  if (selectedTasks.size === visible.length && visible.length > 0) {
+    selectedTasks.clear();
+  } else {
+    visible.forEach(t => selectedTasks.add(t.id));
+  }
+  updateSelectAllUI();
+  refresh();
+}
+
+function toggleSelectAll(checkbox) {
+  const filtered = getFilteredTasks();
+  const visible = filtered.filter(t => !collapsedPhases.has(t.phaseId) && !isAncestorCollapsed(t.id));
+  if (checkbox.checked) { visible.forEach(t => selectedTasks.add(t.id)); }
+  else { selectedTasks.clear(); }
+  updateSelectAllUI();
+  refresh();
+}
+
+function toggleTaskSelect(id, checkbox) {
+  const checked = checkbox.checked;
+  if (checked) {
+    selectedTasks.add(id);
+    // auto-select all descendants
+    getChildren(id).forEach(cid => selectedTasks.add(cid));
+  } else {
+    selectedTasks.delete(id);
+    // auto-unselect all descendants
+    getChildren(id).forEach(cid => selectedTasks.delete(cid));
+  }
+  updateSelectAllUI();
+  refresh();
+}
+
+function updateSelectAllUI() {
+  const filtered = getFilteredTasks();
+  const visible = filtered.filter(t => !collapsedPhases.has(t.phaseId));
+  const allSel = visible.length > 0 && visible.every(t => selectedTasks.has(t.id));
+  document.getElementById('selectAllCheckbox').checked = allSel;
+  document.getElementById('selectAllBtn').textContent = allSel ? '☑ 全选' : '☐ 全选';
+}
+
+function openBatchFillModal() {
+  const count = selectedTasks.size;
+  if (count === 0) { showToast('请先勾选任务'); return; }
+  document.getElementById('batchSelectedInfo').textContent = `已选择 ${count} 个任务，选择要批量填充的字段：`;
+  document.getElementById('batchFillStatus').checked = false;
+  document.getElementById('batchFillDate').checked = false;
+  document.getElementById('batchFillBoth').checked = false;
+  document.getElementById('batchStatusSelect').disabled = true;
+  document.getElementById('batchDateInput').disabled = true;
+  document.getElementById('batchDateInput').value = '';
+  document.getElementById('batchFillModal').classList.add('show');
+}
+
+function closeBatchFillModal() {
+  document.getElementById('batchFillModal').classList.remove('show');
+}
+
+function batchToggleStatus() {
+  const ck = document.getElementById('batchFillStatus').checked;
+  document.getElementById('batchStatusSelect').disabled = !ck;
+  if (ck) { document.getElementById('batchFillBoth').checked = false; }
+}
+
+function batchToggleDate() {
+  const ck = document.getElementById('batchFillDate').checked;
+  document.getElementById('batchDateInput').disabled = !ck;
+  if (ck) { document.getElementById('batchFillBoth').checked = false; }
+}
+
+function batchToggleBoth() {
+  const ck = document.getElementById('batchFillBoth').checked;
+  document.getElementById('batchFillStatus').checked = ck;
+  document.getElementById('batchFillDate').checked = ck;
+  document.getElementById('batchStatusSelect').disabled = !ck;
+  document.getElementById('batchDateInput').disabled = !ck;
+}
+
+function applyBatchFill() {
+  const doStatus = document.getElementById('batchFillStatus').checked || document.getElementById('batchFillBoth').checked;
+  const doDate = document.getElementById('batchFillDate').checked || document.getElementById('batchFillBoth').checked;
+  if (!doStatus && !doDate) { showToast('请至少选择一项填充内容'); return; }
+  const statusVal = document.getElementById('batchStatusSelect').value;
+  const dateVal = document.getElementById('batchDateInput').value;
+  if (doDate && !dateVal) { showToast('请选择完成时间'); return; }
+
+  // validate date range for each selected task
+  if (doDate) {
+    const invalid = [];
+    selectedTasks.forEach(id => {
+      const t = tasks.find(x => x.id === id);
+      if (t && t.start && new Date(dateVal) < new Date(t.start)) {
+        invalid.push(`「${t.seq} ${t.name}」`);
+      }
+    });
+    if (invalid.length > 0) {
+      showToast(`${invalid.slice(0, 3).join('、')}${invalid.length > 3 ? '等' + invalid.length + '个任务' : ''} 完成时间早于开始时间`);
+      return;
+    }
+  }
+
+  let updated = 0;
+  selectedTasks.forEach(id => {
+    const t = tasks.find(x => x.id === id);
+    if (t) {
+      if (doStatus) t.status = statusVal;
+      if (doDate) t.actualEnd = dateVal;
+      updated++;
+    }
+  });
+
+  if (updated > 0) {
+    saveToLocal();
+    renderStats();
+  }
+  closeBatchFillModal();
+  refresh();
+  showToast(`已批量更新 ${updated} 个任务`);
+}
+
+/* ==================== VALIDATION ==================== */
+function validateDateRange(start, end) {
+  if (!start || !end) return null; // skip if either is empty
+  if (new Date(end) < new Date(start)) return '结束时间不能早于开始时间';
+  return null;
+}
+
+function validateTaskDates(task) {
+  const err = validateDateRange(task.start, task.planEnd);
+  if (err) return `「${task.seq} ${task.name}」: ${err}`;
+  return null;
+}
+
+/* ==================== TASK CRUD ==================== */
+function updateTask(id, field, value) {
+  const t = tasks.find(x => x.id === id);
+  if (!t) return;
+  // date field validation
+  if (field === 'planEnd') {
+    const err = validateDateRange(t.start, value);
+    if (err) { showToast(err); return; }
+  }
+  if (field === 'start') {
+    const err = validateDateRange(value, t.planEnd);
+    if (err) { showToast(err); return; }
+  }
+  if (field === 'actualEnd') {
+    const err = validateDateRange(t.start, value);
+    if (err) { showToast(err); return; }
+  }
+  t[field] = value;
+  saveToLocal();
+  renderStats();
+  refresh();
+}
+
+function deleteTask(id) {
+  const t = tasks.find(x => x.id === id);
+  const children = getChildren(id);
+  if (!confirm(`删除「${t.name}」${children.length?'及 '+children.length+' 个子任务':''}？`)) return;
+  tasks = tasks.filter(x => x.id !== id && !children.includes(x.id));
+  saveToLocal();
+    refresh();
+  showToast('任务已删除');
+}
+
+function addSubTask(parentId) {
+  const p = tasks.find(x => x.id === parentId);
+  openTaskModal(null, { phaseId: p.phaseId, lv: p.lv + 1, seq: p.seq + '.1', parentId: p.id });
+}
+
+function openTaskModal(editId, preset) {
+  document.getElementById('taskEditIndex').value = editId || '';
+  document.getElementById('taskPhase').innerHTML = projectPhases().map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  buildParentOptions(editId);
+  if (editId) {
+    document.getElementById('taskModalTitle').textContent = '编辑任务';
+    const t = tasks.find(x => x.id === editId);
+    document.getElementById('taskPhase').value = t.phaseId;
+    document.getElementById('taskSeq').value = t.seq;
+    document.getElementById('taskName').value = t.name;
+    document.getElementById('taskDuration').value = t.dur;
+    document.getElementById('taskStart').value = t.start;
+    document.getElementById('taskPlanEnd').value = t.planEnd;
+    document.getElementById('taskActualEnd').value = t.actualEnd;
+    document.getElementById('taskPredecessor').value = t.predIds || '';
+    predChecked = {};
+    if (t.predIds && t.predIds.trim()) { parsePredIds(t.predIds).forEach(id => { predChecked[id] = true; }); }
+    document.getElementById('taskNote').value = t.note;
+    document.getElementById('taskStatus').value = t.status;
+    document.getElementById('taskParent').value = '';
+  } else {
+    document.getElementById('taskModalTitle').textContent = '添加任务';
+    document.getElementById('taskPhase').value = preset?.phaseId || (projectPhases()[0]?.id || '');
+    document.getElementById('taskSeq').value = preset?.seq || '';
+    document.getElementById('taskName').value = '';
+    document.getElementById('taskDuration').value = '';
+    document.getElementById('taskStart').value = '';
+    document.getElementById('taskPlanEnd').value = '';
+    document.getElementById('taskActualEnd').value = '';
+    document.getElementById('taskPredecessor').value = '';
+    predChecked = {};
+    document.getElementById('taskNote').value = '';
+    document.getElementById('taskStatus').value = '未开始';
+    document.getElementById('taskParent').value = preset?.parentId || '';
+  }
+  document.getElementById('predPicker').classList.remove('show');
+    document.getElementById('notePicker').classList.remove('show');
+    document.getElementById('taskModal').classList.add('show');
+}
+
+/* ==================== PRED PICKER ==================== */
+let predChecked = {};
+
+function togglePredPicker() {
+  const panel = document.getElementById('predPicker');
+  const show = !panel.classList.contains('show');
+  panel.classList.toggle('show');
+  document.getElementById('notePicker').classList.remove('show');
+  if (show) buildPredPickerList();
+}
+
+function buildPredPickerList(filter) {
+  const list = document.getElementById('predPickerList');
+  const currVal = document.getElementById('taskPredecessor').value;
+  // Parse current values as IDs
+  predChecked = {};
+  if (currVal.trim()) {
+    parsePredIds(currVal).forEach(id => { predChecked[id] = true; });
+  }
+  const currentPhaseId = document.getElementById('taskPhase').value;
+  let all = tasks.filter(t => {
+    const ph = phases.find(p => p.id === t.phaseId);
+    return ph && ph.projectId === currentProjectId && t.phaseId === currentPhaseId;
+  });
+  if (filter) { const f = filter.toLowerCase(); all = all.filter(t => t.name.toLowerCase().includes(f)); }
+  all.sort((a, b) => a.seq.localeCompare(b.seq, undefined, { numeric: true }));
+  list.innerHTML = all.map(t => {
+    const checked = predChecked[t.id] ? 'checked' : '';
+    return `<label class="pick-item" onclick="event.stopPropagation();predChecked['${t.id}']=!predChecked['${t.id}'];updatePredInput()">
+      <input type="checkbox" ${checked} onclick="this.checked=!this.checked"><span class="pick-seq">${t.seq}</span><span class="pick-name">${t.name}</span></label>`;
+  }).join('');
+}
+
+function filterPredPicker(val) { buildPredPickerList(val); }
+
+function updatePredInput() {
+  const ids = Object.keys(predChecked).filter(k => predChecked[k]);
+  document.getElementById('taskPredecessor').value = ids.join(', ');
+  buildPredPickerList();
+}
+
+/* ==================== NOTE PICKER ==================== */
+function toggleNotePicker() {
+  const panel = document.getElementById('notePicker');
+  panel.classList.toggle('show');
+  document.getElementById('predPicker').classList.remove('show');
+  if (panel.classList.contains('show')) buildNotePickerList();
+}
+
+function buildNotePickerList(filter) {
+  const list = document.getElementById('notePickerList');
+  const currentPhaseId = document.getElementById('taskPhase').value;
+  let all = tasks.filter(t => {
+    const ph = phases.find(p => p.id === t.phaseId);
+    return ph && ph.projectId === currentProjectId && t.phaseId === currentPhaseId && t.note && t.note.trim();
+  });
+  if (filter) { const f = filter.toLowerCase(); all = all.filter(t => t.note.toLowerCase().includes(f) || t.name.toLowerCase().includes(f)); }
+  all.sort((a, b) => a.seq.localeCompare(b.seq, undefined, { numeric: true }));
+  list.innerHTML = all.map(t => 
+    `<div class="pick-item" onclick="appendNoteOutput('${t.note.replace(/'/g,"\'")}')">
+      <span class="pick-seq">${t.seq}</span>
+      <span class="pick-name">${t.name}</span>
+      <span style="font-size:11px;color:#94a3b8;margin-left:auto;">${t.note}</span>
+    </div>`
+  ).join('');
+  if (all.length === 0) list.innerHTML = '<div class="pick-item" style="color:#999;">暂无任务有产出备注</div>';
+}
+
+function filterNotePicker(val) { buildNotePickerList(val); }
+
+function appendNoteOutput(note) {
+  const ta = document.getElementById('taskNote');
+  const curr = ta.value.trim();
+  ta.value = curr ? curr + '；' + note : note;
+  document.getElementById('notePicker').classList.remove('show');
+}
+
+
+function closeTaskModal() { document.getElementById('taskModal').classList.remove('show'); }
+
+function buildParentOptions(editId) {
+  const phaseId = document.getElementById('taskPhase').value;
+  const editIdVal = editId !== undefined ? editId : document.getElementById('taskEditIndex').value;
+  let opts = '<option value="">无（顶级任务）</option>';
+  tasks.forEach(t => {
+    if (t.id !== editIdVal && t.phaseId === phaseId) {
+      opts += `<option value="${t.id}">${t.seq} ${t.name}</option>`;
+    }
+  });
+  document.getElementById('taskParent').innerHTML = opts;
+}
+
+function saveTask() {
+  const editId = document.getElementById('taskEditIndex').value;
+  const parentVal = document.getElementById('taskParent').value;
+  let lv = 0;
+  if (parentVal) { const pt = tasks.find(x => x.id === parentVal); lv = pt ? pt.lv + 1 : 0; }
+  const data = {
+    id: editId || genId(),
+    phaseId: document.getElementById('taskPhase').value,
+    seq: document.getElementById('taskSeq').value,
+    name: document.getElementById('taskName').value,
+    dur: parseInt(document.getElementById('taskDuration').value) || 0,
+    start: document.getElementById('taskStart').value,
+    planEnd: document.getElementById('taskPlanEnd').value,
+    actualEnd: document.getElementById('taskActualEnd').value,
+    predIds: document.getElementById('taskPredecessor').value,
+    note: document.getElementById('taskNote').value,
+    status: document.getElementById('taskStatus').value,
+    lv: lv,
+    parentId: parentVal
+  };
+  if (!data.name.trim()) { showToast('请输入任务名称'); return; }
+  if (data.start && data.planEnd && new Date(data.planEnd) < new Date(data.start)) { showToast('计划结束时间不能早于开始时间'); return; }
+  if (data.start && data.actualEnd && new Date(data.actualEnd) < new Date(data.start)) { showToast('实际完成时间不能早于开始时间'); return; }
+  if (editId) { const t = tasks.find(x => x.id === editId); data.lv = t.lv; Object.assign(t, data); }
+  else { tasks.push(data); }
+  closeTaskModal();
+  saveToLocal();
+  refresh();
+  showToast(editId ? '任务已更新' : '任务已添加');
+}
+
+/* ==================== GANTT ==================== */
+function renderGantt() {
+  const container = document.getElementById('ganttContainer');
+  const filtered = getFilteredTasks();
+  let allDates = [];
+  filtered.forEach(t => { if(t.start) allDates.push(new Date(t.start)); if(t.planEnd) allDates.push(new Date(t.planEnd)); });
+  if (allDates.length === 0) { container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>暂无数据</p></div>'; return; }
+  let minD = new Date(Math.min(...allDates)); minD.setDate(minD.getDate()-2);
+  let maxD = new Date(Math.max(...allDates)); maxD.setDate(maxD.getDate()+2);
+  const totalDays = Math.ceil((maxD - minD) / (1000*60*60*24));
+  const dayW = Math.max(26, Math.min(44, Math.floor(750 / totalDays)));
+  let months = []; let cursor = new Date(minD);
+  while (cursor <= maxD) {
+    const key = cursor.getFullYear()+'-'+(cursor.getMonth()+1);
+    if (!months.length || months[months.length-1].key !== key) months.push({key, label:cursor.getFullYear()+'年'+(cursor.getMonth()+1)+'月', days:0});
+    months[months.length-1].days++;
+    cursor.setDate(cursor.getDate()+1);
+  }
+  let h = `<div style="min-width:${280+totalDays*dayW}px;">`;
+  h += `<div class="gantt-header"><div class="gantt-label-col">任务</div><div class="gantt-timeline">`;
+  h += `<div class="gantt-month">${months.map(m=>`<div class="gantt-month-cell" style="width:${m.days*dayW}px">${m.label}</div>`).join('')}</div>`;
+  h += `<div class="gantt-day">`;
+  for(let d=new Date(minD); d<=maxD; d.setDate(d.getDate()+1)) h+=`<div class="gantt-day-cell" style="width:${dayW}px">${d.getDate()}</div>`;
+  h += `</div></div></div>`;
+  h += `<div class="gantt-body">`;
+  let seenPhase = new Set();
+  const sorted = [...filtered].sort((a,b) => {
+    const plist = projectPhases().map(p=>p.id);
+    const pa=plist.indexOf(a.phaseId), pb=plist.indexOf(b.phaseId);
+    if(pa!==pb) return pa-pb;
+    return a.seq.localeCompare(b.seq,undefined,{numeric:true});
+  });
+  sorted.forEach(t => {
+    if (!seenPhase.has(t.phaseId)) {
+      seenPhase.add(t.phaseId);
+      const ph = phases.find(p=>p.id===t.phaseId);
+      h += `<div class="gantt-row phase-sep"><div class="gantt-row-label">📂 ${ph?.name||''}</div><div class="gantt-row-bar-wrap"></div></div>`;
+    }
+    h += `<div class="gantt-row"><div class="gantt-row-label" style="padding-left:${10+t.lv*14}px;">${t.seq} ${t.name}</div><div class="gantt-row-bar-wrap">`;
+    if (t.start && t.planEnd) {
+      const sDay = Math.ceil((new Date(t.start)-minD)/(1000*60*60*24));
+      const eDay = Math.ceil((new Date(t.planEnd)-minD)/(1000*60*60*24));
+      h += `<div class="gantt-bar ${t.status==='已完成'?'completed':t.status==='进行中'?'in-progress':t.status==='延期'?'delayed':'not-started'}" style="left:${(sDay/totalDays)*100}%;width:${Math.max(((eDay-sDay+1)/totalDays)*100,0.4)}%;">${t.dur}天</div>`;
+    }
+    h += `</div></div>`;
+  });
+  h += `</div></div>`;
+  container.innerHTML = h;
+}
+
+function toggleView() {
+  const btn = document.getElementById('viewToggleBtn');
+  if (currentView === 'table') {
+    currentView = 'gantt';
+    document.getElementById('tableView').style.display = 'none';
+    document.getElementById('ganttView').style.display = 'flex';
+    btn.innerHTML = '📋 表格';
+    renderGantt();
+  } else {
+    currentView = 'table';
+    document.getElementById('tableView').style.display = 'block';
+    document.getElementById('ganttView').style.display = 'none';
+    btn.innerHTML = '📊 甘特图';
+    renderTable();
+  }
+}
+
+/* ==================== EXPORT ==================== */
+function exportToExcel() {
+  const filtered = getFilteredTasks();
+  const header = ['开发阶段','序号','任务名称','工期/天','开始时间','计划完成时间','实际完成时间','前置任务','备注','项目进度'];
+  const data = [header];
+  filtered.forEach(t => {
+    const ph = phases.find(p => p.id === t.phaseId);
+    const indent = '    '.repeat(t.lv);
+    const predDisplay = t.predIds ? parsePredIds(t.predIds).map(pid => { const pt = tasks.find(x => x.id === pid); return pt ? pt.name : pid; }).join('、') : '';
+    data.push([ph?.name||'', t.seq, indent + t.name, t.dur, t.start, t.planEnd, t.actualEnd, predDisplay, t.note, t.status]);
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:34},{wch:10},{wch:32},{wch:10},{wch:14},{wch:14},{wch:14},{wch:22},{wch:30},{wch:10}];
+
+  // header style: bold + green background
+  const headerStyle = {
+    font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
+    fill: { fgColor: { rgb: '22C55E' } },
+    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+    border: {
+      top: { style: 'thin', color: { rgb: '999999' } },
+      bottom: { style: 'thin', color: { rgb: '999999' } },
+      left: { style: 'thin', color: { rgb: '999999' } },
+      right: { style: 'thin', color: { rgb: '999999' } }
+    }
+  };
+  // data cell style: thin border
+  const dataStyle = {
+    border: {
+      top: { style: 'thin', color: { rgb: 'CCCCCC' } },
+      bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
+      left: { style: 'thin', color: { rgb: 'CCCCCC' } },
+      right: { style: 'thin', color: { rgb: 'CCCCCC' } }
+    },
+    alignment: { vertical: 'center', wrapText: true }
+  };
+
+  // apply styles to all cells
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!ws[addr]) continue;
+      if (typeof ws[addr] === 'object') {
+        ws[addr].s = R === 0 ? headerStyle : dataStyle;
+      } else {
+        ws[addr] = { v: ws[addr], s: R === 0 ? headerStyle : dataStyle };
+      }
+    }
+  }
+
+  // Merge phase column cells for tasks in same phase
+  const phaseNames = filtered.map(t => phases.find(p => p.id === t.phaseId)?.name || '');
+  let mergeStart = 1;
+  for (let i = 1; i < phaseNames.length; i++) {
+    if (phaseNames[i] !== phaseNames[i-1] || i === phaseNames.length - 1) {
+      const endRow = (i === phaseNames.length - 1 && phaseNames[i] === phaseNames[i-1]) ? i + 1 : i;
+      if (endRow > mergeStart + 1) {
+        ws['!merges'] = ws['!merges'] || [];
+        ws['!merges'].push({s:{r:mergeStart, c:0}, e:{r:endRow, c:0}});
+      }
+      mergeStart = i + 1;
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, ws, (currentProject()?.name||'项目')+'_管理计划');
+
+  /* ===== 甘特图 Sheet ===== */
+  const tasksWithDates = filtered.filter(t => t.start && t.planEnd);
+  if (tasksWithDates.length > 0) {
+    let minD = new Date(Math.min(...tasksWithDates.map(t => new Date(t.start))));
+    let maxD = new Date(Math.max(...tasksWithDates.map(t => new Date(t.planEnd))));
+    minD.setDate(minD.getDate() - 1); maxD.setDate(maxD.getDate() + 1);
+
+    const ganttH1 = ['任务'], ganttH2 = [''];
+    const cursor = new Date(minD); let curMonth = '';
+    while (cursor <= maxD) {
+      const mk = cursor.getFullYear()+'年'+(cursor.getMonth()+1)+'月';
+      ganttH1.push(mk !== curMonth ? mk : ''); curMonth = mk;
+      ganttH2.push(cursor.getMonth()+1+'/'+cursor.getDate());
+      cursor.setDate(cursor.getDate()+1);
+    }
+
+    const ganttData = [ganttH1, ganttH2];
+    const statusColors = { '已完成':'22C55E', '进行中':'4F6EF7', '延期':'F59E0B', '未开始':'CBD5E1' };
+    filtered.forEach(t => {
+      const row = ['  '.repeat(t.lv) + t.name];
+      const c2 = new Date(minD);
+      while (c2 <= maxD) {
+        const inRange = t.start && t.planEnd && c2 >= new Date(t.start) && c2 <= new Date(t.planEnd);
+        row.push(inRange ? statusColors[t.status]||'CBD5E1' : '');
+        c2.setDate(c2.getDate()+1);
+      }
+      ganttData.push(row);
+    });
+
+    const gs = XLSX.utils.aoa_to_sheet(ganttData);
+    const gCols = [{wch:30}]; for (let i=1;i<ganttH1.length;i++) gCols.push({wch:3});
+    gs['!cols'] = gCols;
+    gs['!freeze'] = { xSplit: 1, ySplit: 2 };
+
+    // Apply styles
+    const gr = XLSX.utils.decode_range(gs['!ref']);
+    for (let R = gr.s.r; R <= gr.e.r; R++) {
+      for (let C = gr.s.c; C <= gr.e.c; C++) {
+        const addr = XLSX.utils.encode_cell({r:R,c:C});
+        if (!gs[addr]) continue;
+        const cell = (typeof gs[addr]==='object') ? gs[addr] : (gs[addr]={v:gs[addr]});
+        if (R===0) {
+          cell.s = { font:{bold:true,sz:10}, fill:{fgColor:{rgb:'F0F4FF'}}, alignment:{horizontal:'center'}, border:{bottom:{style:'thin',color:{rgb:'AAAAAA'}}} };
+        } else if (R===1) {
+          cell.s = { font:{sz:8,color:{rgb:'888888'}}, alignment:{horizontal:'center'}, border:{bottom:{style:'thin',color:{rgb:'DDDDDD'}}} };
+        } else if (C===0) {
+          cell.s = { font:{sz:9}, border:{bottom:{style:'thin',color:{rgb:'EEEEEE'}}} };
+        } else {
+          const val = cell.v;
+          if (val) {
+            cell.s = { fill:{fgColor:{rgb:val}}, font:{sz:1,color:{rgb:val}} };
+            cell.v = '';
+          }
+        }
+      }
+    }
+
+    // Merge month header cells
+    let mc = 1, pm = ganttH1[1];
+    for (let c=2; c<ganttH1.length; c++) {
+      if (ganttH1[c]!==pm||c===ganttH1.length-1) {
+        const ec = (c===ganttH1.length-1&&ganttH1[c]===pm)?c:c-1;
+        if (ec>mc) { gs['!merges']=gs['!merges']||[]; gs['!merges'].push({s:{r:0,c:mc},e:{r:0,c:ec}}); }
+        mc=c; pm=ganttH1[c];
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb, gs, '甘特图');
+  }
+
+  XLSX.writeFile(wb, (currentProject()?.name||'项目')+'_管理计划_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  showToast('Excel 已导出（含任务表 + 甘特图）');
+}
+
+/* ==================== STATUS FILTER ==================== */
+function renderStatusChips() {
+  const el = document.getElementById('statusChips');
+  const items = ['全部','已完成','进行中','延期','未开始'];
+  el.innerHTML = items.map(s => {
+    const v = s === '全部' ? 'all' : s;
+    return `<span data-s="${v}" style="padding:4px 11px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:12px;${activeStatus===v?'background:var(--primary-light);color:var(--primary);font-weight:500;':''}">${s}</span>`;
+  }).join('');
+  el.querySelectorAll('span').forEach(ch => { ch.addEventListener('click', () => { activeStatus = ch.dataset.s; renderStatusChips(); refresh(); }); });
+}
+
+
+/* ==================== TOAST ==================== */
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/* ==================== REFRESH ==================== */
+
+/* ==================== KNOWLEDGE BASE ==================== */
+function renderKnowledgeBase() {
+  const el = document.getElementById('kbContent');
+  // Group by category in order of kbCategories
+  let html = '';
+  kbCategories.forEach(cat => {
+    const items = knowledgeItems.filter(k => k.category === cat);
+    const isCollapsed = kbCollapsedCats.has(cat);
+    html += `<div class="kb-cat-header${isCollapsed?' collapsed':''}" onclick="toggleKbCategory('${cat.replace(/'/g,"\\'")}')">
+      <span class="kb-cat-toggle">▼</span>
+      <span class="kb-cat-name">${cat}</span>
+      <span class="kb-cat-count">${items.length}</span>
+      ${cat!=='默认分类'?`<button class="kb-cat-del" onclick="event.stopPropagation();deleteKbCategory('${cat.replace(/'/g,"\\'")}')" title="删除分类">✕</button>`:''}
+    </div>`;
+    if (!isCollapsed) {
+      html += '<div class="kb-items">';
+      if (items.length === 0) {
+        html += '<div style="font-size:11px;color:#94a3b8;padding:4px 8px;">暂无条目</div>';
+      } else {
+        items.forEach(k => {
+          const icon = k.type === 'file' ? '📄' : '🔗';
+          const sizeStr = k.size ? formatSize(k.size) : '';
+          html += `<div class="kb-item" onclick="openKbItem('${k.id}')" title="${k.name}">
+            <span class="kb-item-icon">${icon}</span>
+            <span class="kb-item-name">${k.name}</span>
+            ${sizeStr?`<span class="kb-item-size">${sizeStr}</span>`:''}
+            <button class="kb-item-del" onclick="event.stopPropagation();deleteKbItem('${k.id}')" title="删除">✕</button>
+          </div>`;
+        });
+      }
+      html += '</div>';
+    }
+  });
+  el.innerHTML = html || '<div style="font-size:11px;color:#94a3b8;padding:8px;">暂无分类，点击 ＋ 添加条目</div>';
+}
+
+function openKbModal() {
+  document.getElementById('kbModalTitle').textContent = '添加知识库条目';
+  document.getElementById('kbCategory').innerHTML = kbCategories.map(c => `<option value="${c}">${c}</option>`).join('');
+  document.getElementById('kbName').value = '';
+  document.getElementById('kbType').value = 'file';
+  document.getElementById('kbFileInput').value = '';
+  document.getElementById('kbUrl').value = '';
+  kbTypeChange();
+  document.getElementById('kbModal').classList.add('show');
+}
+function closeKbModal() { document.getElementById('kbModal').classList.remove('show'); }
+
+function kbTypeChange() {
+  const type = document.getElementById('kbType').value;
+  document.getElementById('kbFileGroup').style.display = type === 'file' ? '' : 'none';
+  document.getElementById('kbLinkGroup').style.display = type === 'link' ? '' : 'none';
+}
+
+async function saveKbItem() {
+  const name = document.getElementById('kbName').value.trim();
+  if (!name) { showToast('请输入名称'); return; }
+  const category = document.getElementById('kbCategory').value;
+  const type = document.getElementById('kbType').value;
+  const newId = genId();
+  const addedAt = new Date().toISOString();
+
+  if (type === 'file') {
+    const fileInput = document.getElementById('kbFileInput');
+    const file = fileInput.files[0];
+    if (!file) { showToast('请选择文件'); return; }
+    const cfg = await Config.get();
+    if (file.size > cfg.maxFileSizeMB * 1024 * 1024) { showToast('文件超过' + cfg.maxFileSizeMB + 'MB，超出存储限制'); return; }
+    // KB quota check
+    const session = getSession();
+    if (session) {
+      const totalBytes = await DB.sum('pm_data', 'kb_files', 'accountId', session.accountId, 'size');
+      const eff = await Config.getEffectiveQuota(session.accountId);
+      const quotaBytes = eff.kbQuotaMB * 1048576;
+      if (totalBytes + file.size > quotaBytes) {
+        showToast('知识库存储已达上限（' + eff.kbQuotaMB + 'MB），请清理后重试');
+        return;
+      }
+    }
+    try {
+      await kbSaveItem({
+        id: newId, category, name, type,
+        blob: file, size: file.size, addedAt
+      });
+      // 元数据只存数组
+      knowledgeItems.push({ id: newId, category, name, type, size: file.size, addedAt });
+      closeKbModal();
+      renderKnowledgeBase();
+      showToast('文件已添加到知识库');
+    } catch(e) {
+      showToast('文件保存失败: ' + e.message);
+    }
+    return;
+  } else {
+    const path = document.getElementById('kbUrl').value.trim();
+    if (!path) { showToast('请输入链接地址'); return; }
+    if (!/^https?:\/\//.test(path)) { showToast('链接需要以 http:// 或 https:// 开头'); return; }
+    // 链接类型只存元数据到 IndexedDB
+    try {
+      await kbSaveItem({
+        id: newId, category, name, type,
+        blob: null, size: 0, addedAt
+      });
+    } catch(e) { console.warn('IndexedDB 保存链接失败:', e); }
+    knowledgeItems.push({ id: newId, category, name, type, path, size: 0, addedAt });
+  }
+  closeKbModal();
+  renderKnowledgeBase();
+  showToast('条目已添加');
+}
+
+async function deleteKbItem(id) {
+  const k = knowledgeItems.find(x => x.id === id);
+  if (!confirm(`删除「${k.name}」？`)) return;
+  knowledgeItems = knowledgeItems.filter(x => x.id !== id);
+  try { await kbDeleteItem(id); } catch(e) { console.warn('IndexedDB 删除失败:', e); }
+  renderKnowledgeBase();
+  showToast('已删除');
+}
+
+async function openKbItem(id) {
+  const k = knowledgeItems.find(x => x.id === id);
+  if (!k) return;
+  if (k.type === 'link') {
+    window.open(k.path, '_blank');
+  } else {
+    try {
+      const file = await kbGetFile(id);
+      const url = URL.createObjectURL(file.blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch(e) {
+      showToast('文件读取失败: ' + e.message);
+    }
+  }
+}
+
+async function deleteKbCategory(cat) {
+  const cnt = knowledgeItems.filter(k => k.category === cat).length;
+  if (!confirm(`删除分类「${cat}」${cnt?'及其中 '+cnt+' 个条目':''}？`)) return;
+  knowledgeItems = knowledgeItems.filter(k => k.category !== cat);
+  kbCategories = kbCategories.filter(c => c !== cat);
+  kbCollapsedCats.delete(cat);
+  try { await kbDeleteCategory(cat); } catch(e) { console.warn('IndexedDB 批量删除失败:', e); }
+  renderKnowledgeBase();
+  showToast('分类已删除');
+}
+
+function addKbCategory() {
+  const name = prompt('输入新分类名称：');
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  if (kbCategories.includes(trimmed)) { showToast('分类已存在'); return; }
+  kbCategories.push(trimmed);
+  saveToLocal();
+  renderKnowledgeBase();
+  showToast('分类已添加');
+  document.getElementById('kbCategory').innerHTML = kbCategories.map(c => `<option value="${c}"${c===trimmed?' selected':''}>${c}</option>`).join('');
+}
+
+function toggleKbCategory(cat) {
+  if (kbCollapsedCats.has(cat)) kbCollapsedCats.delete(cat);
+  else kbCollapsedCats.add(cat);
+  renderKnowledgeBase();
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + 'KB';
+  return (bytes / 1048576).toFixed(1) + 'MB';
+}
+
+/* ========== 数据持久化（IndexedDB + accountId 隔离） ========== */
+function saveToLocal() {
+  // Legacy stub — saveToDB is async, so direct calls are replaced with async wrapper
+  saveToDB().catch(e => console.warn('saveToDB error:', e));
+}
+
+function loadFromLocal() {
+  // Legacy stub — data is now loaded asynchronously via loadFromDB
+  return false;
+}
+
+async function saveToDB() {
+  const session = getSession();
+  if (!session) return;
+  try {
+    await initDataDB();
+    // Save all projects for this account
+    for (const p of projects) {
+      p.accountId = session.accountId;
+      await DB.put('pm_data', 'projects', p);
+    }
+    // Save all phases for this account
+    for (const ph of phases) {
+      ph.accountId = session.accountId;
+      await DB.put('pm_data', 'phases', ph);
+    }
+    // Save all tasks for this account
+    for (const t of tasks) {
+      t.accountId = session.accountId;
+      await DB.put('pm_data', 'tasks', t);
+    }
+    // Save currentProjectId to localStorage (small setting)
+    localStorage.setItem('pm_currentProjectId_' + session.accountId, currentProjectId);
+    localStorage.setItem('pm_kb_categories_' + session.accountId, JSON.stringify(kbCategories));
+  } catch(e) { console.warn('saveToDB error:', e); }
+}
+
+async function loadFromDB() {
+  const session = getSession();
+  if (!session) return false;
+  try {
+    await initDataDB();
+    // Clear in-memory first
+    projects = [];
+    phases = [];
+    tasks = [];
+    
+    const loadedProjects = await DB.getAllByIndex('pm_data', 'projects', 'accountId', session.accountId);
+    const loadedPhases = await DB.getAllByIndex('pm_data', 'phases', 'accountId', session.accountId);
+    const loadedTasks = await DB.getAllByIndex('pm_data', 'tasks', 'accountId', session.accountId);
+    
+    if (loadedProjects.length > 0 || loadedPhases.length > 0 || loadedTasks.length > 0) {
+      projects = loadedProjects;
+      phases = loadedPhases;
+      tasks = loadedTasks;
+      const cpid = localStorage.getItem('pm_currentProjectId_' + session.accountId);
+      currentProjectId = cpid || (projects.length > 0 ? projects[0].id : 'p1');
+      const kbCats = localStorage.getItem('pm_kb_categories_' + session.accountId);
+      if (kbCats) kbCategories = JSON.parse(kbCats);
+      migratePredToIds();
+      return true;
+    }
+    // Check if localStorage has old data to migrate
+    return await migrateProjectsFromLocal();
+  } catch(e) { console.warn('loadFromDB error:', e); return false; }
+}
+
+async function migrateProjectsFromLocal() {
+  const session = getSession();
+  if (!session) return false;
+  const sp = localStorage.getItem('pm_projects');
+  if (!sp) return false;
+  try {
+    const oldProjects = JSON.parse(localStorage.getItem('pm_projects') || '[]');
+    const oldPhases = JSON.parse(localStorage.getItem('pm_phases') || '[]');
+    const oldTasks = JSON.parse(localStorage.getItem('pm_tasks') || '[]');
+    if (oldProjects.length === 0) return false;
+    
+    // Tag with accountId and save
+    for (const p of oldProjects) { p.accountId = session.accountId; await DB.put('pm_data', 'projects', p); }
+    for (const ph of oldPhases) { ph.accountId = session.accountId; await DB.put('pm_data', 'phases', ph); }
+    for (const t of oldTasks) { t.accountId = session.accountId; await DB.put('pm_data', 'tasks', t); }
+    
+    projects = oldProjects;
+    phases = oldPhases;
+    tasks = oldTasks;
+    
+    const cpid = localStorage.getItem('pm_currentProjectId');
+    currentProjectId = cpid || (projects.length > 0 ? projects[0].id : 'p1');
+    const kbCats = localStorage.getItem('pm_kb_categories');
+    if (kbCats) kbCategories = JSON.parse(kbCats);
+    
+    // Save account-specific settings
+    localStorage.setItem('pm_currentProjectId_' + session.accountId, currentProjectId);
+    if (kbCats) localStorage.setItem('pm_kb_categories_' + session.accountId, kbCats);
+    
+    // Clear old localStorage keys
+    localStorage.removeItem('pm_projects');
+    localStorage.removeItem('pm_phases');
+    localStorage.removeItem('pm_tasks');
+    localStorage.removeItem('pm_currentProjectId');
+    localStorage.removeItem('pm_kb_categories');
+    localStorage.removeItem('pm_kb_items'); // KB migrated separately
+    
+    migratePredToIds();
+    showToast('旧数据已迁移到当前账号');
+    return true;
+  } catch(e) { console.warn('migrateProjectsFromLocal error:', e); return false; }
+}
+
+/* ==================== User Bar ==================== */
+async function updateUserBar() {
+  const session = getSession();
+  if (!session) return;
+  const elDisplay = document.getElementById('userDisplay');
+  const elProjQ = document.getElementById('projectQuota');
+  const elKbQ = document.getElementById('kbQuota');
+  if (elDisplay) elDisplay.textContent = session.displayName || session.username;
+  try {
+    const usage = await getAccountUsage(session.accountId);
+    const eff = await Config.getEffectiveQuota(session.accountId);
+    if (elProjQ) elProjQ.textContent = usage.projectCount + '/' + eff.projectQuota;
+    if (elKbQ) elKbQ.textContent = formatSize(usage.kbBytes) + '/' + eff.kbQuotaMB + 'MB';
+  } catch(e) {}
+}
+
+function refresh() { renderTable(); renderStats(); renderPhaseList(); renderKnowledgeBase(); updateSelectAllUI(); saveToLocal(); updateUserBar(); }
+function refreshAll() {
+  document.getElementById('currentProjectName').textContent = currentProject()?.name || '选择项目';
+  renderProjectDropdown();
+  renderPhaseList();
+  renderStatusChips();
+  renderStats();
+  renderTable();
+  renderKnowledgeBase();
+  updateSelectAllUI();
+  if (currentView === 'gantt') renderGantt();
+  saveToLocal();
+  updateUserBar();
+  // 异步加载知识库元数据
+  kbLoadAll().then(items => { knowledgeItems = items; renderKnowledgeBase(); }).catch(e => console.warn('知识库加载失败:', e));
+}
+
+/* ==================== GLOBAL ==================== */
+document.addEventListener('click', e => {
+  if (!e.target.closest('.project-select')) document.getElementById('projectDropdown').classList.remove('show');
+});
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'n') { e.preventDefault(); openTaskModal(); }
+  if (e.ctrlKey && e.key === 'g') { e.preventDefault(); toggleView(); }
+  if (e.ctrlKey && e.key === 's') { e.preventDefault(); exportToExcel(); }
+  if (e.key === 'Escape') { closeTaskModal(); closePhaseModal(); closeProjectModal(); closeBatchFillModal(); closeKbModal(); }
+});
+
+/* ==================== INIT + AUTO TEST ==================== */
+(async function init() {
+  const session = getSession();
+  if (!session) return;
+  
+  // Warm up config
+  Config.get().catch(e => console.warn('Config init error:', e));
+  
+  // Initialize data DB
+  await initDataDB();
+  
+  // Try loading from IndexedDB first
+  const loaded = await loadFromDB();
+  if (!loaded) {
+    // No existing data - use defaults for first-time users
+    projects = [
+      { id: 'p1', name: '浦东清单', desc: '浦东项目开发管理' }
+    ];
+    phases = [
+      { id: 'ph1', projectId: 'p1', name: '阶段一 功能开发和优化', start: '2023-08-24', end: '2023-10-31' },
+      { id: 'ph2', projectId: 'p1', name: '阶段二 问题修复与新功能开发', start: '2023-11-01', end: '2023-12-30' }
+    ];
+    tasks = [
+      { id:'t1', phaseId:'ph1', seq:'1', name:'需求分析与确定', dur:15, start:'2023-08-24', planEnd:'2023-09-08', actualEnd:'2023-09-08', predIds:'', note:'', status:'已完成', lv:0, parentId:'' },
+      { id:'t2', phaseId:'ph1', seq:'1.1', name:'产品需求分析', dur:15, start:'2023-08-24', planEnd:'2023-09-08', actualEnd:'2023-09-08', predIds:'', note:'', status:'已完成', lv:1, parentId:'t1' },
+      { id:'t3', phaseId:'ph1', seq:'1.2', name:'产品需求列表', dur:5, start:'2023-09-04', planEnd:'2023-09-08', actualEnd:'2023-09-08', predIds:'', note:'输出产品需求文档', status:'已完成', lv:1, parentId:'t1' },
+      { id:'t4', phaseId:'ph1', seq:'2', name:'产品设计/概要设计', dur:15, start:'2023-09-11', planEnd:'2023-09-26', actualEnd:'', predIds:'t1', note:'', status:'延期', lv:0, parentId:'' },
+      { id:'t5', phaseId:'ph1', seq:'2.1', name:'总体设计', dur:10, start:'2023-09-11', planEnd:'2023-09-21', actualEnd:'', predIds:'', note:'输出总体设计说明书', status:'延期', lv:1, parentId:'t4' },
+      { id:'t6', phaseId:'ph1', seq:'2.2', name:'概要设计', dur:5, start:'2023-09-22', planEnd:'2023-09-26', actualEnd:'', predIds:'', note:'输出概要设计说明书', status:'延期', lv:1, parentId:'t4' },
+      { id:'t7', phaseId:'ph1', seq:'3', name:'UI设计', dur:16, start:'2023-09-11', planEnd:'2023-09-27', actualEnd:'', predIds:'t6', note:'', status:'延期', lv:0, parentId:'' },
+      { id:'t8', phaseId:'ph1', seq:'3.1', name:'原型设计', dur:8, start:'2023-09-11', planEnd:'2023-09-19', actualEnd:'2023-09-19', predIds:'', note:'输出原型设计稿', status:'已完成', lv:1, parentId:'t7' },
+      { id:'t9', phaseId:'ph1', seq:'3.2', name:'UI高保真设计', dur:8, start:'2023-09-20', planEnd:'2023-09-27', actualEnd:'2023-09-27', predIds:'', note:'输出UI设计稿', status:'已完成', lv:1, parentId:'t7' },
+      { id:'t10', phaseId:'ph1', seq:'4', name:'软件架构', dur:10, start:'2023-09-11', planEnd:'2023-09-21', actualEnd:'', predIds:'t5', note:'', status:'进行中', lv:0, parentId:'' },
+      { id:'t11', phaseId:'ph1', seq:'4.1', name:'软件环境搭建', dur:10, start:'2023-09-11', planEnd:'2023-09-21', actualEnd:'', predIds:'', note:'', status:'进行中', lv:1, parentId:'t10' },
+      { id:'t12', phaseId:'ph1', seq:'5', name:'编码', dur:23, start:'2023-10-07', planEnd:'2023-10-30', actualEnd:'', predIds:'', note:'', status:'进行中', lv:0, parentId:'' },
+      { id:'t13', phaseId:'ph1', seq:'5.1', name:'运维监测平台', dur:23, start:'2023-10-07', planEnd:'2023-10-30', actualEnd:'', predIds:'', note:'', status:'进行中', lv:1, parentId:'t12' },
+      { id:'t14', phaseId:'ph1', seq:'5.1.1', name:'基础功能', dur:15, start:'2023-10-07', planEnd:'2023-10-22', actualEnd:'', predIds:'', note:'', status:'进行中', lv:2, parentId:'t13' },
+      { id:'t15', phaseId:'ph1', seq:'5.1.1', name:'登录/退出/会话超时', dur:15, start:'2023-10-07', planEnd:'2023-10-22', actualEnd:'', predIds:'', note:'', status:'进行中', lv:3, parentId:'t14' },
+      { id:'t16', phaseId:'ph1', seq:'6', name:'联调', dur:14, start:'2023-10-16', planEnd:'2023-10-30', actualEnd:'', predIds:'', note:'', status:'未开始', lv:0, parentId:'' },
+      { id:'t17', phaseId:'ph1', seq:'6.1', name:'整体联调', dur:14, start:'2023-10-16', planEnd:'2023-10-30', actualEnd:'', predIds:'', note:'', status:'未开始', lv:1, parentId:'t16' },
+      { id:'t18', phaseId:'ph1', seq:'7', name:'测试与测试报告', dur:11, start:'2023-10-16', planEnd:'2023-10-27', actualEnd:'', predIds:'', note:'', status:'未开始', lv:0, parentId:'' },
+      { id:'t19', phaseId:'ph1', seq:'7.1', name:'研发内部集成测试', dur:11, start:'2023-10-16', planEnd:'2023-10-27', actualEnd:'', predIds:'', note:'', status:'未开始', lv:1, parentId:'t18' },
+      { id:'t20', phaseId:'ph1', seq:'7.1.1', name:'研发内部测试与bug提交', dur:7, start:'2023-10-16', planEnd:'2023-10-23', actualEnd:'', predIds:'', note:'', status:'未开始', lv:2, parentId:'t19' },
+      { id:'t21', phaseId:'ph1', seq:'7.1.2', name:'研发内部bugfix', dur:4, start:'2023-10-24', planEnd:'2023-10-27', actualEnd:'', predIds:'', note:'', status:'未开始', lv:2, parentId:'t19' },
+      { id:'t22', phaseId:'ph1', seq:'7.2', name:'产品测试', dur:38, start:'2023-09-19', planEnd:'2023-10-27', actualEnd:'', predIds:'', note:'', status:'未开始', lv:1, parentId:'t18' },
+      { id:'t23', phaseId:'ph1', seq:'7.2.1', name:'测试用例', dur:5, start:'2023-09-19', planEnd:'2023-09-23', actualEnd:'', predIds:'', note:'输出测试用例', status:'未开始', lv:2, parentId:'t22' },
+      { id:'t24', phaseId:'ph1', seq:'7.2.2', name:'系统测试', dur:10, start:'2023-09-25', planEnd:'2023-10-04', actualEnd:'', predIds:'', note:'', status:'未开始', lv:2, parentId:'t22' },
+      { id:'t25', phaseId:'ph1', seq:'7.2.3', name:'性能测试', dur:5, start:'2023-10-05', planEnd:'2023-10-09', actualEnd:'', predIds:'', note:'输出性能测试报告', status:'未开始', lv:2, parentId:'t22' },
+      { id:'t26', phaseId:'ph1', seq:'7.2.4', name:'回归测试', dur:5, start:'2023-10-10', planEnd:'2023-10-14', actualEnd:'', predIds:'', note:'输出bug清单', status:'未开始', lv:2, parentId:'t22' },
+      { id:'t27', phaseId:'ph1', seq:'7.2.5', name:'测试报告', dur:13, start:'2023-10-15', planEnd:'2023-10-27', actualEnd:'', predIds:'', note:'输出测试报告', status:'未开始', lv:2, parentId:'t22' },
+      { id:'t28', phaseId:'ph1', seq:'8', name:'产品化', dur:60, start:'2023-09-01', planEnd:'2023-10-31', actualEnd:'', predIds:'', note:'', status:'未开始', lv:0, parentId:'' },
+      { id:'t29', phaseId:'ph1', seq:'8.1', name:'软件使用手册/FAQ', dur:10, start:'2023-10-22', planEnd:'2023-10-31', actualEnd:'', predIds:'', note:'输出软件操作手册', status:'未开始', lv:1, parentId:'t28' },
+      { id:'t30', phaseId:'ph2', seq:'1', name:'需求分析与确定', dur:15, start:'2023-11-01', planEnd:'2023-11-16', actualEnd:'', predIds:'t29', note:'输出产品需求文档；输出总体设计说明书；输出概要设计说明书；输出原型设计稿；输出UI设计稿；输出测试用例；输出性能测试报告；输出bug清单；输出测试报告；输出软件操作手册', status:'未开始', lv:0, parentId:'' },
+      { id:'t31', phaseId:'ph2', seq:'1.1', name:'产品需求分析', dur:15, start:'2023-11-01', planEnd:'2023-11-16', actualEnd:'', predIds:'', note:'', status:'未开始', lv:1, parentId:'t30' },
+      { id:'t32', phaseId:'ph2', seq:'1.2', name:'产品需求列表', dur:5, start:'2023-11-12', planEnd:'2023-11-16', actualEnd:'', predIds:'', note:'输出产品需求文档', status:'未开始', lv:1, parentId:'t30' },
+      { id:'t33', phaseId:'ph2', seq:'2', name:'产品设计/概要设计', dur:15, start:'2023-11-19', planEnd:'2023-12-04', actualEnd:'', predIds:'t30', note:'', status:'未开始', lv:0, parentId:'' },
+      { id:'t34', phaseId:'ph2', seq:'2.1', name:'总体设计', dur:10, start:'2023-11-19', planEnd:'2023-11-29', actualEnd:'', predIds:'', note:'输出总体设计说明书', status:'未开始', lv:1, parentId:'t33' },
+      { id:'t35', phaseId:'ph2', seq:'2.2', name:'概要设计', dur:5, start:'2023-11-30', planEnd:'2023-12-04', actualEnd:'', predIds:'', note:'输出概要设计说明书', status:'未开始', lv:1, parentId:'t33' },
+      { id:'t36', phaseId:'ph2', seq:'3', name:'UI设计', dur:16, start:'2023-11-19', planEnd:'2023-12-05', actualEnd:'', predIds:'t35', note:'', status:'未开始', lv:0, parentId:'' },
+      { id:'t37', phaseId:'ph2', seq:'3.1', name:'原型设计', dur:8, start:'2023-11-19', planEnd:'2023-11-27', actualEnd:'', predIds:'', note:'输出原型设计稿', status:'未开始', lv:1, parentId:'t36' },
+      { id:'t38', phaseId:'ph2', seq:'3.2', name:'UI高保真设计', dur:8, start:'2023-11-28', planEnd:'2023-12-05', actualEnd:'', predIds:'', note:'输出UI设计稿', status:'未开始', lv:1, parentId:'t36' },
+      { id:'t39', phaseId:'ph2', seq:'4', name:'软件架构', dur:10, start:'2023-11-19', planEnd:'2023-11-29', actualEnd:'', predIds:'t34', note:'', status:'未开始', lv:0, parentId:'' },
+      { id:'t40', phaseId:'ph2', seq:'4.1', name:'软件环境搭建', dur:10, start:'2023-11-19', planEnd:'2023-11-29', actualEnd:'', predIds:'', note:'', status:'未开始', lv:1, parentId:'t39' },
+      { id:'t41', phaseId:'ph2', seq:'5', name:'编码', dur:23, start:'2023-12-06', planEnd:'2023-12-29', actualEnd:'', predIds:'t58', note:'', status:'未开始', lv:0, parentId:'' },
+      { id:'t42', phaseId:'ph2', seq:'5.1', name:'运维监测平台', dur:23, start:'2023-12-06', planEnd:'2023-12-29', actualEnd:'', predIds:'', note:'', status:'未开始', lv:1, parentId:'t41' },
+      { id:'t43', phaseId:'ph2', seq:'5.1.1', name:'基础功能', dur:15, start:'2023-12-06', planEnd:'2023-12-21', actualEnd:'', predIds:'', note:'', status:'未开始', lv:2, parentId:'t42' },
+      { id:'t44', phaseId:'ph2', seq:'5.1.1', name:'登录/退出/会话超时', dur:15, start:'2023-12-06', planEnd:'2023-12-21', actualEnd:'', predIds:'', note:'', status:'未开始', lv:3, parentId:'t43' },
+      { id:'t45', phaseId:'ph2', seq:'6', name:'联调', dur:14, start:'2023-12-15', planEnd:'2023-12-29', actualEnd:'', predIds:'t58', note:'', status:'未开始', lv:0, parentId:'' },
+      { id:'t46', phaseId:'ph2', seq:'6.1', name:'整体联调', dur:14, start:'2023-12-15', planEnd:'2023-12-29', actualEnd:'', predIds:'', note:'', status:'未开始', lv:1, parentId:'t45' },
+      { id:'t47', phaseId:'ph2', seq:'7', name:'测试与测试报告', dur:11, start:'2023-12-15', planEnd:'2023-12-26', actualEnd:'', predIds:'t58', note:'', status:'未开始', lv:0, parentId:'' },
+      { id:'t48', phaseId:'ph2', seq:'7.1', name:'研发内部集成测试', dur:11, start:'2023-12-15', planEnd:'2023-12-26', actualEnd:'', predIds:'', note:'', status:'未开始', lv:1, parentId:'t47' },
+      { id:'t49', phaseId:'ph2', seq:'7.1.1', name:'研发内部测试与bug提交', dur:7, start:'2023-12-15', planEnd:'2023-12-22', actualEnd:'', predIds:'', note:'', status:'未开始', lv:2, parentId:'t48' },
+      { id:'t50', phaseId:'ph2', seq:'7.1.2', name:'研发内部bugfix', dur:4, start:'2023-12-23', planEnd:'2023-12-26', actualEnd:'', predIds:'', note:'', status:'未开始', lv:2, parentId:'t48' },
+      { id:'t51', phaseId:'ph2', seq:'7.2', name:'产品测试', dur:38, start:'2023-11-19', planEnd:'2023-12-26', actualEnd:'', predIds:'', note:'', status:'未开始', lv:1, parentId:'t47' },
+      { id:'t52', phaseId:'ph2', seq:'7.2.1', name:'测试用例', dur:5, start:'2023-11-19', planEnd:'2023-11-23', actualEnd:'', predIds:'', note:'输出测试用例', status:'未开始', lv:2, parentId:'t51' },
+      { id:'t53', phaseId:'ph2', seq:'7.2.2', name:'系统测试', dur:10, start:'2023-11-24', planEnd:'2023-12-03', actualEnd:'', predIds:'', note:'', status:'未开始', lv:2, parentId:'t51' },
+      { id:'t54', phaseId:'ph2', seq:'7.2.3', name:'性能测试', dur:5, start:'2023-12-04', planEnd:'2023-12-08', actualEnd:'', predIds:'', note:'输出性能测试报告', status:'未开始', lv:2, parentId:'t51' },
+      { id:'t55', phaseId:'ph2', seq:'7.2.4', name:'回归测试', dur:5, start:'2023-12-09', planEnd:'2023-12-13', actualEnd:'', predIds:'', note:'输出bug清单', status:'未开始', lv:2, parentId:'t51' },
+      { id:'t56', phaseId:'ph2', seq:'7.2.5', name:'测试报告', dur:13, start:'2023-12-14', planEnd:'2023-12-26', actualEnd:'', predIds:'', note:'输出测试报告', status:'未开始', lv:2, parentId:'t51' },
+      { id:'t57', phaseId:'ph2', seq:'8', name:'产品化', dur:60, start:'2023-11-01', planEnd:'2023-12-30', actualEnd:'', predIds:'t58', note:'', status:'未开始', lv:0, parentId:'' },
+      { id:'t58', phaseId:'ph2', seq:'8.1', name:'软件使用手册/FAQ', dur:10, start:'2023-12-21', planEnd:'2023-12-30', actualEnd:'', predIds:'', note:'输出软件操作手册', status:'未开始', lv:1, parentId:'t57' },
+    ];
+  }
+  
+  // Migrate KB data
+  const kbMigrated = await kbMigrateFromLocal();
+  if (kbMigrated) console.log('知识库数据已从 localStorage 迁移至 IndexedDB');
+  
+  refreshAll();
+})();
+</script>
+</body>
+</html>
