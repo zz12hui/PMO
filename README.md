@@ -233,3 +233,10 @@ MIT License — 随便用，随便改。
 | [SOP.md](./SOP.md) | 管理员 + 项目经理（规范操作） |
 | [DEPLOY.md](./DEPLOY.md) | 运维 / 部署人员 |
 | [CLAUDE.md](./CLAUDE.md) | AI 编程助手 |
+
+
+## 作者微信，
+创作交流请加备注github
+#### 支持定制项目可按需求
+<img width="566" height="540" alt="image" src="https://github.com/user-attachments/assets/dd67ac0b-a751-46a8-b762-d71715faa049" />
+
